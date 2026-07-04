@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.ui.theme.AppShapes
-import me.rerere.rikkahub.ui.components.settings.LastChatFormItem
 
 @Composable
 fun FormItem(
@@ -29,13 +28,35 @@ fun FormItem(
     tail: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit = {}
 ) {
-    LastChatFormItem(
-        modifier = modifier,
-        label = label,
-        description = description,
-        tail = tail,
-        content = content,
-    )
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = modifier.weight(1f)
+        ) {
+            ProvideTextStyle(
+                MaterialTheme.typography.labelMedium.copy(
+                    color = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                label()
+            }
+            ProvideTextStyle(
+                MaterialTheme.typography.labelSmall.copy(
+                    color = LocalContentColor.current.copy(alpha = 0.6f)
+                )
+            ) {
+                Column {
+                    description?.invoke()
+                }
+            }
+            content()
+        }
+        tail()
+    }
 }
 
 @Preview(showBackground = true)

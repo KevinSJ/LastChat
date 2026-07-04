@@ -371,6 +371,8 @@ Always use these UUIDs in `provider_ids` arrays:
 | `f8e32910-c114-411a-b302-18cb92193b3b` | Replicate |
 | `fb74da0c-cf14-45ff-98de-1e3df6a94b3c` | Cerebras |
 | `7a9b0c10-d8f9-467f-94d0-258fe3da49b4` | SambaNova |
+| `e4fce9f0-b4d2-453f-90b6-e1c5b615269c` | Zhipu AI |
+| `391d9f85-7824-4c19-9697-09b1f2a33e3b` | Anthropic Claude |
 | `ce456892-f6bb-4598-bbb5-2658fe0d2955` | InternLM |
 
 To find a UUID for a provider not listed above, search for `"name": "<ProviderName>"` in

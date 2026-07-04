@@ -42,7 +42,7 @@ object JinaSearchService : SearchService<SearchServiceOptions.JinaOptions> {
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.JinaOptions
-    ): Result<SearchResult> = withContext(searchIoDispatcher) {
+    ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
 
@@ -89,7 +89,7 @@ object JinaSearchService : SearchService<SearchServiceOptions.JinaOptions> {
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.JinaOptions
-    ): Result<ScrapedResult> = withContext(searchIoDispatcher) {
+    ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
         runCatching {
             val url = params["url"]?.jsonPrimitive?.content ?: error("urls is required")
 

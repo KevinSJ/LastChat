@@ -101,18 +101,6 @@ class ModelDisplayNameGeneratorTest {
         assertEquals("Qwen 3 235B", names[2])
     }
 
-    @Test
-    fun `batch - Ollama tags disambiguate the same base model`() {
-        val names = ModelDisplayNameGenerator.generateBatch(
-            listOf(
-                "gpt-oss:120b" to null,
-                "gpt-oss:20b" to null,
-            )
-        )
-
-        assertEquals(listOf("GPT-Oss 120B", "GPT-Oss 20B"), names)
-    }
-
     // ---------- Batch generation - date disambiguation ----------
 
     @Test

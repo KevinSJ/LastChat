@@ -22,37 +22,57 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import me.rerere.tts.model.AudioFormat
 import me.rerere.tts.model.PlaybackState
 import me.rerere.tts.model.PlaybackStatus
 import me.rerere.tts.model.TTSResponse
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
-class AudioPlayer(context: Context) : TtsAudioPlayer {
+class AudioPlayer(context: Context) {
     private val player = ExoPlayer.Builder(context).build()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val _playbackState = MutableStateFlow(PlaybackState())
-    override val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
+    val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
 
     private var positionJob: Job? = null
-    private var totalChunksCount = 0
 
-    init {
-        player.addListener(object : Player.Listener {
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                val chunkIndex = mediaItem?.mediaId?.toIntOrNull()
-                val current1Based = if (chunkIndex != null) chunkIndex + 1 else player.currentMediaItemIndex + 1
-                _playbackState.update {
-                    it.copy(
-                        currentChunkIndex = current1Based,
-                        totalChunks = totalChunksCount.coerceAtLeast(current1Based),
-                        positionMs = 0L,
-                        durationMs = if (player.duration > 0) player.duration else 0L,
-                        status = if (player.isPlaying) PlaybackStatus.Playing else it.status
-                    )
-                }
-            }
+    fun pause() = player.pause()
+    fun resume() = player.play()
+    fun stop() = player.stop()
+    fun clear() = player.clearMediaItems()
+    fun release() = player.release()
+    fun seekBy(ms: Long) = player.seekTo(player.currentPosition + ms)
+    fun setSpeed(speed: Float) {
+        player.playbackParameters = PlaybackParameters(speed)
+        _playbackState.update { it.copy(speed = speed) }
+    }
 
+    @OptIn(UnstableApi::class)
+    suspend fun play(response: TTSResponse) = suspendCancellableCoroutine<Unit> { cont ->
+        val bytes = if (response.format == AudioFormat.PCM) {
+            pcmToWavBytes(response.audioData, response.sampleRate ?: 24000)
+        } else response.audioData
+
+        val dataSourceFactory = DataSource.Factory { ByteArrayDataSource(bytes) }
+        val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+            .createMediaSource(MediaItem.fromUri(Uri.EMPTY))
+
+        player.setMediaSource(mediaSource)
+        player.prepare()
+        player.play()
+
+        _playbackState.update {
+            it.copy(
+                status = PlaybackStatus.Buffering,
+                positionMs = 0L,
+                durationMs = (response.duration?.times(1000))?.toLong() ?: it.durationMs
+            )
+        }
+
+        val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 when (state) {
                     Player.STATE_BUFFERING -> {
@@ -62,15 +82,11 @@ class AudioPlayer(context: Context) : TtsAudioPlayer {
                     Player.STATE_READY -> {
                         val isPlaying = player.isPlaying
                         val duration = if (player.duration > 0) player.duration else playbackState.value.durationMs
-                        val chunkIndex = player.currentMediaItem?.mediaId?.toIntOrNull()
-                        val current1Based = if (chunkIndex != null) chunkIndex + 1 else player.currentMediaItemIndex + 1
                         _playbackState.update {
                             it.copy(
                                 status = if (isPlaying) PlaybackStatus.Playing else PlaybackStatus.Paused,
                                 durationMs = duration,
-                                positionMs = player.currentPosition,
-                                currentChunkIndex = current1Based,
-                                totalChunks = totalChunksCount.coerceAtLeast(current1Based)
+                                positionMs = player.currentPosition
                             )
                         }
                         if (isPlaying) startPositionUpdates() else stopPositionUpdates()
@@ -84,6 +100,8 @@ class AudioPlayer(context: Context) : TtsAudioPlayer {
                                 durationMs = if (player.duration > 0) player.duration else it.durationMs
                             )
                         }
+                        player.removeListener(this)
+                        if (cont.isActive) cont.resume(Unit)
                     }
                     Player.STATE_IDLE -> {
                         stopPositionUpdates()
@@ -93,105 +111,23 @@ class AudioPlayer(context: Context) : TtsAudioPlayer {
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                player.removeListener(this)
                 stopPositionUpdates()
                 _playbackState.update { it.copy(status = PlaybackStatus.Error, errorMessage = error.message) }
+                if (cont.isActive) cont.resumeWithException(error)
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                val status = if (isPlaying) PlaybackStatus.Playing else {
-                    if (player.playbackState == Player.STATE_ENDED) PlaybackStatus.Ended
-                    else if (player.playbackState == Player.STATE_IDLE) PlaybackStatus.Idle
-                    else PlaybackStatus.Paused
-                }
+                val status = if (isPlaying) PlaybackStatus.Playing else PlaybackStatus.Paused
                 _playbackState.update { it.copy(status = status) }
                 if (isPlaying) startPositionUpdates() else stopPositionUpdates()
             }
-        })
-    }
-
-    override fun pause() {
-        player.pause()
-        stopPositionUpdates()
-        _playbackState.update { it.copy(status = PlaybackStatus.Paused) }
-    }
-
-    override fun resume() {
-        if (player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0) {
-            player.prepare()
         }
-        player.play()
-        _playbackState.update { it.copy(status = PlaybackStatus.Playing) }
-    }
-
-    override fun stop() {
-        player.stop()
-        player.clearMediaItems()
-        stopPositionUpdates()
-        totalChunksCount = 0
-        _playbackState.update { PlaybackState(status = PlaybackStatus.Idle) }
-    }
-
-    override fun clear() {
-        player.clearMediaItems()
-        totalChunksCount = 0
-    }
-
-    override fun release() {
-        stop()
-        player.release()
-    }
-
-    override fun seekBy(ms: Long) {
-        val target = (player.currentPosition + ms).coerceAtLeast(0L)
-        player.seekTo(target)
-    }
-
-    override fun setSpeed(speed: Float) {
-        player.playbackParameters = PlaybackParameters(speed)
-        _playbackState.update { it.copy(speed = speed) }
-    }
-
-    override fun skipNext() {
-        if (player.hasNextMediaItem()) {
-            player.seekToNextMediaItem()
-        }
-    }
-
-    override fun setTotalChunks(total: Int) {
-        totalChunksCount = total
-        _playbackState.update { it.copy(totalChunks = total) }
-    }
-
-    @OptIn(UnstableApi::class)
-    override fun enqueue(chunkIndex: Int, totalChunks: Int, response: TTSResponse) {
-        totalChunksCount = totalChunks
-        val bytes = if (response.format == AudioFormat.PCM) {
-            pcmToWavBytes(response.audioData, response.sampleRate ?: 24000)
-        } else response.audioData
-
-        val dataSourceFactory = DataSource.Factory { ByteArrayDataSource(bytes) }
-        val mediaItem = MediaItem.Builder()
-            .setMediaId(chunkIndex.toString())
-            .setUri(Uri.EMPTY)
-            .build()
-        val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-            .createMediaSource(mediaItem)
-
-        val isIdleOrEnded = player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED
-        player.addMediaSource(mediaSource)
-
-        if (isIdleOrEnded) {
-            player.prepare()
-            player.play()
-        } else if (!player.isPlaying && player.playWhenReady) {
-            player.play()
-        }
-
-        _playbackState.update {
-            it.copy(
-                totalChunks = totalChunks,
-                status = if (player.isPlaying) PlaybackStatus.Playing else PlaybackStatus.Buffering
-            )
+        player.addListener(listener)
+        cont.invokeOnCancellation {
+            player.removeListener(listener)
+            player.stop()
+            stopPositionUpdates()
         }
     }
 
@@ -199,14 +135,10 @@ class AudioPlayer(context: Context) : TtsAudioPlayer {
         if (positionJob?.isActive == true) return
         positionJob = scope.launch(Dispatchers.Main.immediate) {
             while (true) {
-                val chunkIndex = player.currentMediaItem?.mediaId?.toIntOrNull()
-                val current1Based = if (chunkIndex != null) chunkIndex + 1 else player.currentMediaItemIndex + 1
                 _playbackState.update {
                     it.copy(
                         positionMs = player.currentPosition,
-                        durationMs = if (player.duration > 0) player.duration else it.durationMs,
-                        currentChunkIndex = current1Based,
-                        totalChunks = totalChunksCount.coerceAtLeast(current1Based)
+                        durationMs = if (player.duration > 0) player.duration else it.durationMs
                     )
                 }
                 delay(100)
@@ -218,6 +150,6 @@ class AudioPlayer(context: Context) : TtsAudioPlayer {
         positionJob?.cancel()
         positionJob = null
     }
-}
 
+}
 

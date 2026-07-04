@@ -62,9 +62,6 @@ fun AssistantModelSubPage(
     onUpdate: (Assistant) -> Unit
 ) {
     var maxTokensPending by remember { mutableStateOf(false) }
-    val currentModel = remember(assistant.chatModelId, providers) {
-        providers.flatMap { it.models }.firstOrNull { it.id == assistant.chatModelId }
-    }
 
     Column(
         modifier = Modifier
@@ -318,11 +315,9 @@ fun AssistantModelSubPage(
                     ReasoningLevel.LOW -> stringResource(R.string.reasoning_light)
                     ReasoningLevel.MEDIUM -> stringResource(R.string.reasoning_medium)
                     ReasoningLevel.HIGH -> stringResource(R.string.reasoning_heavy)
-                    ReasoningLevel.MAX -> "Max"
                 },
                 trailing = {
                     ReasoningButton(
-                        model = currentModel,
                         reasoningTokens = assistant.thinkingBudget ?: 0,
                         onUpdateReasoningTokens = { tokens ->
                             onUpdate(assistant.copy(thinkingBudget = tokens))

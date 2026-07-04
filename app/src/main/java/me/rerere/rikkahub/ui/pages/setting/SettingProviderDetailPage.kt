@@ -70,7 +70,6 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import me.rerere.rikkahub.ui.components.ui.HapticSwitch
-import me.rerere.rikkahub.ui.components.ui.DebouncedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -108,7 +107,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DragIndicator
@@ -141,8 +139,6 @@ import me.rerere.ai.provider.ImageGenerationMethod
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
-import me.rerere.ai.provider.ContextLimitSource
-import me.rerere.ai.provider.providers.isLikelyOllama
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.registry.ModelIdNormalizer
 import me.rerere.ai.ui.MessageChunk
@@ -150,6 +146,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.models.ModelMetadataResolver
+import me.rerere.rikkahub.data.ai.models.ModelResolutionOptions
 import me.rerere.rikkahub.ui.components.ai.ModelAbilityTag
 import me.rerere.rikkahub.ui.components.ai.ModelModalityTag
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
@@ -158,7 +155,6 @@ import me.rerere.rikkahub.ui.components.ai.ProviderBalanceText
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.AutoAIIconWithUrl
-import me.rerere.rikkahub.ui.components.ui.EmptyStateCard
 import me.rerere.rikkahub.ui.components.ui.ProviderIcon
 import me.rerere.rikkahub.ui.components.ui.ModelIcon
 import me.rerere.rikkahub.ui.components.ui.ShareSheet
@@ -178,10 +174,7 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.CustomBodies
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomHeaders
 import me.rerere.rikkahub.ui.pages.setting.components.CustomIconSelector
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
-import me.rerere.rikkahub.ui.pages.setting.components.CodexProviderConfigure
 import me.rerere.rikkahub.ui.pages.setting.components.SettingProviderBalanceOption
-import me.rerere.rikkahub.data.codex.CodexAccountRepository
-import me.rerere.rikkahub.data.codex.CodexTokenStatus
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.ImageUtils
@@ -196,7 +189,13 @@ import kotlin.uuid.Uuid
 import me.rerere.rikkahub.data.model.Tag as DataTag
 import me.rerere.rikkahub.ui.components.ui.FormItem
 
-internal fun resolveProviderModel(
+private val providerPickerResolutionOptions = ModelResolutionOptions(
+    preserveDisplayName = true,
+    preserveExistingCapabilities = true,
+    preserveExistingType = true,
+)
+
+private fun resolveProviderModel(
     resolver: ModelMetadataResolver,
     provider: ProviderSetting,
     model: Model,
@@ -204,17 +203,7 @@ internal fun resolveProviderModel(
     return resolver.applyToModel(
         model = model,
         providerHint = provider,
-    )
-}
-
-internal fun resolveProviderModels(
-    resolver: ModelMetadataResolver,
-    provider: ProviderSetting,
-    models: List<Model>,
-): List<Model> {
-    return resolver.applyToModels(
-        models = models,
-        providerHint = provider,
+        options = providerPickerResolutionOptions,
     )
 }
 
@@ -236,7 +225,6 @@ internal fun modelsReferToSameApiModel(savedModel: Model, apiModel: Model): Bool
 
 private fun Model.qualifiers(): Set<String> {
     return buildSet {
-        addAll(ModelIdNormalizer.extractModelTagTokens(modelId))
         modelId.lowercase().split(Regex("[\\-_:\\/\\s()]+")).forEach { token ->
             if (token in ModelIdNormalizer.removableSuffixes) {
                 add(token)
@@ -271,17 +259,8 @@ private fun String.normalizeModelMatchToken(): String {
         .replace('.', '-')
 }
 
-private fun ProviderSetting.apiModelCacheKey(
-    codexAccountId: String? = null,
-    codexAuthExpiresAt: Long? = null,
-): String {
+private fun ProviderSetting.apiModelCacheKey(): String {
     return when (this) {
-        is ProviderSetting.Codex -> listOf(
-            "codex",
-            id.toString(),
-            codexAccountId.orEmpty(),
-            codexAuthExpiresAt?.toString().orEmpty(),
-        )
         is ProviderSetting.OpenAI -> listOf(
             "openai",
             id.toString(),
@@ -314,19 +293,12 @@ private fun ProviderSetting.apiModelCacheKey(
             baseUrl,
             workflowJson.hashCode().toString(),
         )
-
-        is ProviderSetting.LiteRtLocal -> listOf(
-            "litert_local",
-            id.toString(),
-            models.size.toString(),
-        )
     }.joinToString("|")
 }
 
-private fun ProviderSetting.canFetchApiModels(codexAccountAvailable: Boolean = false): Boolean {
+private fun ProviderSetting.canFetchApiModels(): Boolean {
     return when (this) {
-        is ProviderSetting.Codex -> codexAccountAvailable
-        is ProviderSetting.OpenAI -> apiKey.isNotBlank() || isLikelyOllama()
+        is ProviderSetting.OpenAI -> apiKey.isNotBlank()
         is ProviderSetting.Google -> if (vertexAI) {
             serviceAccountEmail.isNotBlank() && privateKey.isNotBlank() && projectId.isNotBlank()
         } else {
@@ -334,77 +306,7 @@ private fun ProviderSetting.canFetchApiModels(codexAccountAvailable: Boolean = f
         }
         is ProviderSetting.Claude -> apiKey.isNotBlank()
         is ProviderSetting.ComfyUI -> workflowJson.isNotBlank()
-        is ProviderSetting.LiteRtLocal -> false // on-device: no remote model list
     }
-}
-
-internal fun syncFreshModelMetadata(
-    freshModels: List<Model>,
-    currentProvider: ProviderSetting,
-): ProviderSetting {
-    val updatedModels = currentProvider.models.map { savedModel ->
-        val freshModel = freshModels.firstOrNull { apiModel ->
-            modelsReferToSameApiModel(savedModel, apiModel)
-        }
-        if (freshModel != null) {
-            val preserveManualContext = savedModel.contextLimitSource == ContextLimitSource.MANUAL ||
-                (savedModel.contextLimitSource == null && savedModel.contextWindowTokens != null)
-            savedModel.copy(
-                canonicalModelId = freshModel.canonicalModelId ?: savedModel.canonicalModelId,
-                iconUrl = freshModel.iconUrl,
-                providerSlug = freshModel.providerSlug,
-                contextWindowTokens = if (preserveManualContext) {
-                    savedModel.contextWindowTokens
-                } else {
-                    freshModel.contextWindowTokens ?: savedModel.contextWindowTokens
-                },
-                maxInputTokens = if (preserveManualContext) {
-                    savedModel.maxInputTokens
-                } else {
-                    freshModel.maxInputTokens ?: savedModel.maxInputTokens
-                },
-                maxOutputTokens = if (preserveManualContext) {
-                    savedModel.maxOutputTokens
-                } else {
-                    freshModel.maxOutputTokens ?: savedModel.maxOutputTokens
-                },
-                contextLimitSource = if (preserveManualContext) {
-                    ContextLimitSource.MANUAL
-                } else {
-                    freshModel.contextLimitSource ?: savedModel.contextLimitSource
-                },
-            )
-        } else {
-            savedModel
-        }
-    }
-    return currentProvider.copyProvider(models = updatedModels)
-}
-
-private data class ApiModelSource(
-    val cacheKey: String,
-    val canFetchModels: Boolean,
-)
-
-@Composable
-private fun rememberApiModelSource(provider: ProviderSetting): ApiModelSource {
-    if (provider is ProviderSetting.Codex) {
-        val repository = koinInject<CodexAccountRepository>()
-        val accounts by repository.accounts.collectAsStateWithLifecycle()
-        val account = accounts.singleOrNull()
-        val canFetch = account != null && account.tokenStatus != CodexTokenStatus.INVALID
-        return ApiModelSource(
-            cacheKey = provider.apiModelCacheKey(
-                codexAccountId = account?.id,
-                codexAuthExpiresAt = account?.expiresAt,
-            ),
-            canFetchModels = provider.canFetchApiModels(canFetch),
-        )
-    }
-    return ApiModelSource(
-        cacheKey = provider.apiModelCacheKey(),
-        canFetchModels = provider.canFetchApiModels(),
-    )
 }
 
 private fun iconFileExtension(context: android.content.Context, uri: android.net.Uri): String {
@@ -429,12 +331,14 @@ private object ApiModelListCache {
     private val lock = Any()
     private val modelsByProvider = mutableMapOf<String, List<Model>>()
 
-    fun get(key: String): List<Model>? = synchronized(lock) {
-        modelsByProvider[key]
+    fun get(key: String): List<Model> = synchronized(lock) {
+        modelsByProvider[key].orEmpty()
     }
 
     fun put(key: String, models: List<Model>) = synchronized(lock) {
-        modelsByProvider[key] = models
+        if (models.isNotEmpty()) {
+            modelsByProvider[key] = models
+        }
     }
 }
 
@@ -658,29 +562,16 @@ private fun SettingProviderConfigPage(
                     containerColor = if (LocalDarkMode.current) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainerHighest
                 )
             ) {
-                val currentProvider = internalProvider
-                if (currentProvider is ProviderSetting.Codex) {
-                    CodexProviderConfigure(
-                        provider = currentProvider,
-                        showSavingIndicator = isSaving,
-                        onEdit = {
-                            internalProvider = it
-                            // Auto-save immediately
-                            onEdit(it)
-                        }
-                    )
-                } else {
-                    ProviderConfigure(
-                        provider = internalProvider,
-                        modifier = Modifier.padding(16.dp),
-                        showSavingIndicator = isSaving,
-                        onEdit = {
-                            internalProvider = it
-                            // Auto-save immediately
-                            onEdit(it)
-                        }
-                    )
-                }
+                ProviderConfigure(
+                    provider = internalProvider,
+                    modifier = Modifier.padding(16.dp),
+                    showSavingIndicator = isSaving,
+                    onEdit = {
+                        internalProvider = it
+                        // Auto-save immediately
+                        onEdit(it)
+                    }
+                )
             }
             
             // Tags section
@@ -891,47 +782,76 @@ private fun ModelList(
     val density = LocalDensity.current
     val haptics = me.rerere.rikkahub.ui.hooks.rememberPremiumHaptics()
     val modelMetadataResolver = koinInject<ModelMetadataResolver>()
-    val apiModelSource = rememberApiModelSource(providerSetting)
-    val apiModelCacheKey = apiModelSource.cacheKey
+    val apiModelCacheKey = remember(providerSetting) { providerSetting.apiModelCacheKey() }
     var modelList by remember(apiModelCacheKey) { mutableStateOf(ApiModelListCache.get(apiModelCacheKey)) }
     var isReloadingModels by remember(apiModelCacheKey) { mutableStateOf(false) }
     var reloadModelsError by remember(apiModelCacheKey) { mutableStateOf<String?>(null) }
 
+    fun syncFreshModelMetadata(freshModels: List<Model>, currentProvider: ProviderSetting): ProviderSetting {
+        val updatedModels = currentProvider.models.map { savedModel ->
+            val freshModel = freshModels.firstOrNull { apiModel ->
+                modelsReferToSameApiModel(savedModel, apiModel)
+            }
+            if (freshModel != null) {
+                val preserveDisplayName = savedModel.displayName.isNotBlank() &&
+                    savedModel.displayName != savedModel.modelId
+                savedModel.copy(
+                    displayName = if (preserveDisplayName) savedModel.displayName else freshModel.displayName,
+                    canonicalModelId = freshModel.canonicalModelId ?: savedModel.canonicalModelId,
+                    type = freshModel.type,
+                    inputModalities = freshModel.inputModalities,
+                    outputModalities = freshModel.outputModalities,
+                    abilities = freshModel.abilities,
+                    iconUrl = freshModel.iconUrl,
+                    providerSlug = freshModel.providerSlug,
+                    imageGenerationMethod = freshModel.imageGenerationMethod,
+                    reasoningBehavior = savedModel.reasoningBehavior ?: freshModel.reasoningBehavior,
+                )
+            } else {
+                resolveProviderModel(modelMetadataResolver, currentProvider, savedModel)
+            }
+        }
+        return currentProvider.copyProvider(models = updatedModels)
+    }
+
     fun reloadApiModels() {
         if (isReloadingModels) return
-        if (!apiModelSource.canFetchModels) return
+        if (!providerSetting.canFetchApiModels()) return
         scope.launch {
             isReloadingModels = true
             reloadModelsError = null
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    providerManager.getProviderByType(providerSetting)
-                        .listModels(providerSetting)
-                        .sortedBy { it.modelId }
-                        .toList()
-                }.let { models ->
-                    resolveProviderModels(modelMetadataResolver, providerSetting, models)
+            var retryAttempt = 0
+            do {
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        providerManager.getProviderByType(providerSetting)
+                            .listModels(providerSetting)
+                            .sortedBy { it.modelId }
+                            .toList()
+                    }.map { model ->
+                        resolveProviderModel(modelMetadataResolver, providerSetting, model)
+                    }
+                }.onSuccess { freshModels ->
+                    if (freshModels.isNotEmpty()) {
+                        ApiModelListCache.put(apiModelCacheKey, freshModels)
+                        modelList = freshModels
+                        val updatedProvider = syncFreshModelMetadata(freshModels, providerSetting)
+                        if (updatedProvider != providerSetting) {
+                            onUpdateProvider(updatedProvider)
+                        }
+                    }
+                }.onFailure { error ->
+                    reloadModelsError = error.message ?: error::class.simpleName
+                    isReloadingModels = false
+                    return@launch
                 }
-            }.onSuccess { freshModels ->
-                ApiModelListCache.put(apiModelCacheKey, freshModels)
-                modelList = freshModels
-                val updatedProvider = syncFreshModelMetadata(
-                    freshModels = freshModels,
-                    currentProvider = providerSetting,
-                )
-                if (updatedProvider != providerSetting) {
-                    onUpdateProvider(updatedProvider)
-                }
-            }.onFailure { error ->
-                reloadModelsError = error.message ?: error::class.simpleName
-            }
-            isReloadingModels = false
-        }
-    }
 
-    LaunchedEffect(apiModelCacheKey, apiModelSource.canFetchModels) {
-        if (modelList == null && apiModelSource.canFetchModels) {
-            reloadApiModels()
+                if (modelList.isEmpty()) {
+                    retryAttempt++
+                    delay((retryAttempt * 1_500L).coerceAtMost(10_000L))
+                }
+            } while (modelList.isEmpty())
+            isReloadingModels = false
         }
     }
     
@@ -1061,16 +981,25 @@ private fun ModelList(
             // Empty state for saved models
             if (providerSetting.models.isEmpty()) {
                 item {
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillParentMaxHeight(0.8f)
                             .fillMaxWidth(),
-                        contentAlignment = Alignment.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        EmptyStateCard(
-                            icon = Icons.Rounded.Cloud,
-                            title = stringResource(R.string.setting_provider_page_no_models),
-                            description = stringResource(R.string.setting_provider_page_add_models_hint),
+                        Text(
+                            text = stringResource(R.string.setting_provider_page_no_models),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.setting_provider_page_add_models_hint),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 32.dp)
                         )
                     }
                 }
@@ -1103,9 +1032,7 @@ private fun ModelList(
         ) {
             // Model picker FAB (gray, like lorebook toggle button)
             ModelPickerFab(
-                models = modelList.orEmpty(),
-                modelsLoaded = modelList != null,
-                canReload = apiModelSource.canFetchModels,
+                models = modelList,
                 selectedModels = providerSetting.models,
                 isLoading = isReloadingModels,
                 reloadError = reloadModelsError,
@@ -1467,19 +1394,6 @@ private fun ModelSettingsForm(
                                 }
                             )
                         }
-
-                        if (model.type == ModelType.CHAT) {
-                            ModelContextLimits(
-                                model = model,
-                                onModelChange = onModelChange,
-                            )
-                            BackendModelToggle(
-                                backend = model.backend,
-                                onBackendChange = {
-                                    onModelChange(model.copy(backend = it))
-                                }
-                            )
-                        }
                     }
                 }
 
@@ -1523,8 +1437,6 @@ private fun ModelSettingsForm(
 @Composable
 private fun ModelPickerFab(
     models: List<Model>,
-    modelsLoaded: Boolean,
-    canReload: Boolean,
     selectedModels: List<Model>,
     isLoading: Boolean,
     reloadError: String?,
@@ -1539,17 +1451,14 @@ private fun ModelPickerFab(
     var showPicker by remember { mutableStateOf(false) }
     val haptics = me.rerere.rikkahub.ui.hooks.rememberPremiumHaptics()
     val modelMetadataResolver = koinInject<ModelMetadataResolver>()
-
-    LaunchedEffect(showPicker, modelsLoaded, canReload, isLoading, reloadError) {
-        if (showPicker && !modelsLoaded && canReload && !isLoading && reloadError == null) {
-            onReload()
-        }
-    }
     
     FloatingActionButton(
         onClick = { 
             showPicker = true
             haptics.perform(me.rerere.rikkahub.ui.hooks.HapticPattern.Tick)
+            if (models.isEmpty() && !isLoading) {
+                onReload()
+            }
         },
         shape = me.rerere.rikkahub.ui.theme.AppShapes.CardLarge,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -1570,7 +1479,9 @@ containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceCon
             var filterText by remember { mutableStateOf("") }
             val filterKeywords = filterText.split(" ").filter { it.isNotBlank() }
             val resolvedModels = remember(models, parentProvider) {
-                resolveProviderModels(modelMetadataResolver, parentProvider, models)
+                models.map { model ->
+                    resolveProviderModel(modelMetadataResolver, parentProvider, model)
+                }
             }
             val filteredModels = resolvedModels.fastFilter {
                 if (filterKeywords.isEmpty()) {
@@ -1631,7 +1542,7 @@ containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceCon
                                 haptics.perform(me.rerere.rikkahub.ui.hooks.HapticPattern.Pop)
                                 onReload()
                             },
-                            enabled = canReload && !isLoading,
+                            enabled = !isLoading,
                             modifier = Modifier.height(40.dp),
                         ) {
                             Icon(Icons.Rounded.Refresh, contentDescription = null)
@@ -1652,6 +1563,13 @@ containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceCon
                 ) {
                     if (filteredModels.isEmpty()) {
                         item {
+                            val hasApiKey = when (parentProvider) {
+                                is ProviderSetting.OpenAI -> parentProvider.apiKey.isNotBlank()
+                                is ProviderSetting.Google -> parentProvider.apiKey.isNotBlank()
+                                is ProviderSetting.Claude -> parentProvider.apiKey.isNotBlank()
+                                is ProviderSetting.ComfyUI -> parentProvider.workflowJson.isNotBlank()
+                            }
+                            
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1661,13 +1579,8 @@ containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceCon
                             ) {
                                 Text(
                                     text = stringResource(
-                                        when {
-                                            parentProvider is ProviderSetting.Codex && !canReload -> {
-                                                R.string.codex_sign_in_to_load_models
-                                            }
-                                            canReload -> R.string.setting_provider_page_no_models_with_api_key
-                                            else -> R.string.setting_provider_page_no_models_no_api_key
-                                        }
+                                        if (hasApiKey) R.string.setting_provider_page_no_models_with_api_key
+                                        else R.string.setting_provider_page_no_models_no_api_key
                                     ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1852,6 +1765,11 @@ containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceCon
                                     dialogState.currentState = modelMetadataResolver.applyToModel(
                                         model = modelState,
                                         providerHint = parentProvider,
+                                        options = ModelResolutionOptions(
+                                            preserveDisplayName = true,
+                                            preserveExistingCapabilities = true,
+                                            preserveExistingType = modelState.type != ModelType.CHAT,
+                                        ),
                                     )
                                     dialogState.confirm()
                                 }
@@ -1991,12 +1909,10 @@ containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceCon
                         item {
                             // Check if provider has an API key
                             val hasApiKey = when (parentProvider) {
-                                is ProviderSetting.Codex -> true
                                 is ProviderSetting.OpenAI -> parentProvider.apiKey.isNotBlank()
                                 is ProviderSetting.Google -> parentProvider.apiKey.isNotBlank()
                                 is ProviderSetting.Claude -> parentProvider.apiKey.isNotBlank()
                                 is ProviderSetting.ComfyUI -> parentProvider.workflowJson.isNotBlank()
-                                is ProviderSetting.LiteRtLocal -> true
                             }
                             
                             Column(
@@ -2144,11 +2060,6 @@ private suspend fun probeModelCapabilities(
     model: Model,
 ): ProbedModelCapabilities? {
     return when (provider) {
-        is ProviderSetting.Codex -> probeModelCapabilities(
-            providerInstance = providerManager.getProviderByType(provider),
-            provider = provider,
-            model = model,
-        )
         is ProviderSetting.OpenAI -> probeModelCapabilities(
             providerInstance = providerManager.getProviderByType(provider),
             provider = provider,
@@ -2168,7 +2079,6 @@ private suspend fun probeModelCapabilities(
         )
 
         is ProviderSetting.ComfyUI -> null
-        is ProviderSetting.LiteRtLocal -> null
     }
 }
 
@@ -2375,12 +2285,6 @@ private fun MessageChunk.primaryMessage() = choices.firstOrNull()?.message ?: ch
 
 private fun buildToolProbeCustomBodies(provider: ProviderSetting): List<CustomBody> {
     return when (provider) {
-        is ProviderSetting.Codex -> listOf(
-            CustomBody(
-                key = "tool_choice",
-                value = JsonPrimitive("required"),
-            )
-        )
         is ProviderSetting.OpenAI -> listOf(
             CustomBody(
                 key = "tool_choice",
@@ -2409,7 +2313,6 @@ private fun buildToolProbeCustomBodies(provider: ProviderSetting): List<CustomBo
         )
 
         is ProviderSetting.ComfyUI -> emptyList()
-        is ProviderSetting.LiteRtLocal -> emptyList()
     }
 }
 
@@ -2486,90 +2389,6 @@ private fun ModelCapabilityProbeButton(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun ModelContextLimits(
-    model: Model,
-    onModelChange: (Model) -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        DebouncedTextField(
-            value = model.contextWindowTokens?.toString().orEmpty(),
-            onValueChange = { value ->
-                val manualLimit = value.toIntOrNull()?.takeIf { it > 0 }
-                onModelChange(
-                    model.copy(
-                        contextWindowTokens = manualLimit,
-                        maxInputTokens = null,
-                        maxOutputTokens = null,
-                        contextLimitSource = ContextLimitSource.MANUAL.takeIf { manualLimit != null },
-                    )
-                )
-            },
-            stateKey = "context_window_${model.id}",
-            label = stringResource(R.string.setting_provider_page_context_window),
-            placeholder = stringResource(R.string.setting_provider_page_optional_number),
-            singleLine = true,
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
-            ),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        if (Modality.IMAGE in model.inputModalities) {
-            DebouncedTextField(
-                value = model.maxImagesInContext?.toString().orEmpty(),
-                onValueChange = { value ->
-                    onModelChange(model.copy(maxImagesInContext = value.toIntOrNull()?.takeIf { it > 0 }))
-                },
-                stateKey = "max_context_images_${model.id}",
-                label = stringResource(R.string.setting_provider_page_max_context_images),
-                placeholder = stringResource(R.string.setting_provider_page_optional_number),
-                singleLine = true,
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
-
-}
-
-@Composable
-private fun BackendModelToggle(
-    backend: Boolean,
-    onBackendChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                stringResource(R.string.setting_provider_page_backend_model),
-                style = MaterialTheme.typography.titleSmall
-            )
-            Text(
-                stringResource(R.string.setting_provider_page_backend_model_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        HapticSwitch(
-            checked = backend,
-            onCheckedChange = onBackendChange
-        )
     }
 }
 
@@ -3263,18 +3082,10 @@ containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceCon
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        val currentProvider = internalProvider
-                        if (currentProvider is ProviderSetting.Codex) {
-                            CodexProviderConfigure(
-                                provider = currentProvider,
-                                onEdit = { internalProvider = it }
-                            )
-                        } else {
-                            ProviderConfigure(
-                                provider = internalProvider,
-                                onEdit = { internalProvider = it }
-                            )
-                        }
+                        ProviderConfigure(
+                            provider = internalProvider,
+                            onEdit = { internalProvider = it }
+                        )
                     }
 
                     Row(

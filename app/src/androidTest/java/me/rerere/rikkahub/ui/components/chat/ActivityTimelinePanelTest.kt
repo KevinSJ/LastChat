@@ -158,9 +158,6 @@ class ActivityTimelinePanelTest {
             composeRule.onAllNodesWithTag("activity_timeline_panel").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("activity_timeline_panel").assertExists()
-        composeRule.onNodeWithText("inline timeline").assertDoesNotExist()
-
-        composeRule.onNodeWithTag("timeline_entry_tool_search-call").performClick()
         composeRule.onNodeWithText("inline timeline").assertExists()
         composeRule.onNodeWithText("example.com").assertExists()
 
@@ -169,10 +166,7 @@ class ActivityTimelinePanelTest {
             composeRule.onAllNodesWithTag("activity_timeline_panel").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag("activity_timeline_panel").assertExists()
-        composeRule.onNodeWithText(reasoningMarker, substring = true).assertDoesNotExist()
-        composeRule.onNodeWithTag("timeline_entry_reasoning_0").performClick()
         composeRule.onNodeWithText(reasoningMarker, substring = true).assertExists()
-        composeRule.onNodeWithText("example.com").assertDoesNotExist()
 
         composeRule.onNodeWithTag("activity_timeline_panel").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -342,8 +336,6 @@ class ActivityTimelinePanelTest {
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("activity_timeline_panel").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("scan.pdf").assertDoesNotExist()
-        composeRule.onNodeWithTag("timeline_entry_ocr_0").performClick()
         composeRule.onNodeWithText("scan.pdf").assertExists()
         composeRule.onNodeWithText("1, 3", substring = true).assertExists()
     }
@@ -407,8 +399,7 @@ class ActivityTimelinePanelTest {
                             deleteMemory = { },
                             restoreMemory = { },
                             revertMemory = { _, _ -> }
-                        ),
-                        isLive = true,
+                        )
                     )
                 }
             }
@@ -455,8 +446,7 @@ class ActivityTimelinePanelTest {
                         initialOpenRequest = TimelineOpenRequest(
                             focusType = ActivityType.MEMORY_RECALL,
                             openMode = TimelineOpenMode.Collapsed
-                        ),
-                        isLive = true,
+                        )
                     )
                 }
             }
@@ -465,52 +455,5 @@ class ActivityTimelinePanelTest {
         composeRule.onNodeWithTag("activity_timeline_panel").assertExists()
         composeRule.onNodeWithText(memoryRecallLabel).assertExists()
         composeRule.onNodeWithText(recallSummary).assertExists()
-    }
-
-    @Test
-    fun chatMessageTurn_singleCompletedActivityOpensDirectlyWithoutMinimization() {
-        val reasoningMarker = "single-completed-reasoning-marker"
-        val assistantNode = MessageNode.of(
-            UIMessage(
-                role = MessageRole.ASSISTANT,
-                parts = listOf(
-                    UIMessagePart.Reasoning(
-                        reasoning = reasoningMarker,
-                        createdAt = Clock.System.now() - 2.seconds,
-                        finishedAt = Clock.System.now()
-                    ),
-                    UIMessagePart.Text("Answer text")
-                )
-            )
-        )
-        val group = MessageTurnGroup(
-            nodes = listOf(assistantNode),
-            role = MessageRole.ASSISTANT
-        )
-
-        composeRule.setContent {
-            CompositionLocalProvider(LocalSettings provides Settings()) {
-                MaterialTheme {
-                    ChatMessageTurn(
-                        group = group,
-                        isLastTurn = false,
-                        onCitationClick = {},
-                        loading = false,
-                        showRegenerate = false
-                    )
-                }
-            }
-        }
-
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("activity_pill_reasoning").fetchSemanticsNodes().isNotEmpty()
-        }
-
-        // Clicking the single activity pill should immediately reveal the content without needing to expand an accordion
-        composeRule.onNodeWithTag("activity_pill_reasoning").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("activity_timeline_panel").fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText(reasoningMarker, substring = true).assertExists()
     }
 }

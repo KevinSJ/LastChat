@@ -127,40 +127,33 @@ object ModelDisplayNameGenerator {
         return merged
     }
 
-    private val SIZE_TOKEN_REGEX = Regex("\\d+[bmkt]")
-    private val ARCH_TOKEN_REGEX = Regex("a\\d+[bmkt]?")
-    private val REVISION_TOKEN_REGEX = Regex("r\\d+")
-    private val ALPHANUM_TOKEN_REGEX = Regex("[a-z]+\\d+(?:\\.\\d+)?")
-    private val NUMBER_TOKEN_REGEX = Regex("\\d+(?:\\.\\d+)?")
-    private val DATE_TOKEN_REGEX = Regex("20\\d{6}")
-
     internal fun formatToken(token: String): String {
         brandCasing[token]?.let { return it }
 
-        if (token.matches(SIZE_TOKEN_REGEX)) {
+        if (token.matches(Regex("\\d+[bmkt]"))) {
             return token.dropLast(1) + token.takeLast(1).uppercase()
         }
 
-        if (token.matches(ARCH_TOKEN_REGEX)) {
+        if (token.matches(Regex("a\\d+[bmkt]?"))) {
             return token.uppercase()
         }
 
-        if (token.matches(REVISION_TOKEN_REGEX)) {
+        if (token.matches(Regex("r\\d+"))) {
             return token.uppercase()
         }
 
-        if (token.matches(ALPHANUM_TOKEN_REGEX)) {
+        if (token.matches(Regex("[a-z]+\\d+(?:\\.\\d+)?"))) {
             val letters = token.takeWhile { it.isLetter() }
             val numbers = token.dropWhile { it.isLetter() }
             val prefix = brandCasing[letters] ?: letters.replaceFirstChar { it.titlecase() }
             return prefix + numbers
         }
 
-        if (token.matches(NUMBER_TOKEN_REGEX)) {
+        if (token.matches(Regex("\\d+(?:\\.\\d+)?"))) {
             return token
         }
 
-        if (token.matches(DATE_TOKEN_REGEX)) {
+        if (token.matches(Regex("20\\d{6}"))) {
             return formatDateToken(token)
         }
 

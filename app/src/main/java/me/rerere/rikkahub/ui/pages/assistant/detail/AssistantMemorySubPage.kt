@@ -80,7 +80,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
@@ -138,54 +137,20 @@ fun AssistantMemorySettings(
     onRegenerateEmbeddings: (() -> Unit)? = null,
     embeddingProgress: EmbeddingProgress? = null,
     onTestRetrieval: ((String) -> Unit)? = null,
-    retrievalDebugState: MemoryRetrievalDebugState = MemoryRetrievalDebugState(),
+    retrievalResults: List<Pair<AssistantMemory, Float>> = emptyList(),
     assistantDetailVM: AssistantDetailVM,
     estimatedMemoryCapacity: Int,
     needsEmbeddingRegeneration: Boolean = false,
-    embeddingStatus: String? = null,
     initialMemoryTab: Int? = null,  // 0 = Core, 1 = Episodic
     scrollToMemoryId: Int? = null,
     onNavigateToSummarizerSettings: () -> Unit = {}
 ) {
-    var showReembedConfirmation by remember { mutableStateOf(false) }
-    val requestEmbeddingRegeneration = onRegenerateEmbeddings?.let {
-        { showReembedConfirmation = true }
-    }
     val memoryDialogState = useEditState<AssistantMemory> {
         if (it.id == 0) {
             onAddMemory(it)
         } else {
             onUpdateMemory(it)
         }
-    }
-
-    if (showReembedConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showReembedConfirmation = false },
-            title = { Text("Re-embed all memories?") },
-            text = {
-                Text(
-                    "This will regenerate and replace embeddings for every Core and Episodic " +
-                        "memory using the currently selected embedding model. Your memory text " +
-                        "will not be deleted."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showReembedConfirmation = false
-                        onRegenerateEmbeddings?.invoke()
-                    }
-                ) {
-                    Text("Re-embed all")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showReembedConfirmation = false }) {
-                    Text(stringResource(R.string.assistant_page_cancel))
-                }
-            },
-        )
     }
     
     // Embedding progress dialog
@@ -253,12 +218,12 @@ fun AssistantMemorySettings(
     ) {
         // Mode Indicator
         MemoryModeIndicator(mode = currentMode)
-
+        
         // ═══════════════════════════════════════════════════════════════════
         // SETTINGS GROUP
         // ═══════════════════════════════════════════════════════════════════
         SettingsGroupHeader(title = stringResource(R.string.assistant_memory_settings_title))
-
+        
         Column(
             modifier = Modifier.clip(RoundedCornerShape(24.dp)),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -283,7 +248,7 @@ fun AssistantMemorySettings(
                 exit = fadeOut() + shrinkVertically()
             ) {
                 val isLockedByConsolidation = assistant.enableMemoryConsolidation
-
+                
                 MemorySettingsItem(
                     title = stringResource(R.string.assistant_page_recent_chats),
                     subtitle = stringResource(R.string.assistant_page_recent_chats_desc),
@@ -299,7 +264,7 @@ fun AssistantMemorySettings(
                         Box(modifier = Modifier.graphicsLayer { alpha = toggleAlpha }) {
                             HapticSwitch(
                                 checked = assistant.enableRecentChatsReference || isLockedByConsolidation,
-                                onCheckedChange = {
+                                onCheckedChange = { 
                                     if (!isLockedByConsolidation) {
                                         onUpdateAssistant(assistant.copy(enableRecentChatsReference = it))
                                     }
@@ -380,13 +345,8 @@ fun AssistantMemorySettings(
                                     ))
                                 } else {
                                     onUpdateAssistant(assistant.copy(
-                                        enableMemory = true,
                                         enableMemoryConsolidation = true,
-                                        enableRecentChatsReference = true,
-                                        useRagMemoryRetrieval = true,
-                                        ragIncludeCore = true,
-                                        ragIncludeEpisodes = true,
-                                        ragLimit = assistant.ragLimit.coerceAtLeast(1),
+                                        enableRecentChatsReference = true
                                     ))
                                 }
                             }
@@ -408,24 +368,9 @@ fun AssistantMemorySettings(
                 SettingsGroupHeader(title = stringResource(R.string.assistant_memory_rag_settings))
                 RagSettingsCard(assistant = assistant, onUpdateAssistant = onUpdateAssistant)
 
-                if (embeddingStatus != null) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        shape = AppShapes.ListItem,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = embeddingStatus,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(16.dp),
-                        )
-                    }
-                }
-
                 // Regenerate embeddings button (visible when embeddings are missing or outdated)
                 AnimatedVisibility(
-                    visible = needsEmbeddingRegeneration && requestEmbeddingRegeneration != null,
+                    visible = needsEmbeddingRegeneration && onRegenerateEmbeddings != null,
                     enter = fadeIn() + expandVertically(),
                     exit = fadeOut() + shrinkVertically()
                 ) {
@@ -444,7 +389,7 @@ fun AssistantMemorySettings(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Button(
-                                onClick = { requestEmbeddingRegeneration?.invoke() },
+                                onClick = { onRegenerateEmbeddings?.invoke() },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Icon(Icons.Rounded.Refresh, null, modifier = Modifier.size(18.dp))
@@ -467,10 +412,11 @@ fun AssistantMemorySettings(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 SettingsGroupHeader(title = stringResource(R.string.assistant_memory_advanced_settings))
-
+                
                 ConsolidationSettingsCard(
                     assistant = assistant,
                     onUpdateAssistant = onUpdateAssistant,
+                    onConsolidate = { assistantDetailVM.consolidateMemories(true) },
                     showSummarizerWarning = !hasSummarizerModelConfigured,
                     onNavigateToSummarizerSettings = onNavigateToSummarizerSettings
                 )
@@ -513,7 +459,7 @@ fun AssistantMemorySettings(
                 showMemoryTypes = assistant.enableMemoryConsolidation,
                 initialMemoryTab = initialMemoryTab,
                 scrollToMemoryId = scrollToMemoryId,
-                onRegenerateEmbeddings = requestEmbeddingRegeneration,
+                onRegenerateEmbeddings = onRegenerateEmbeddings,
                 embeddingProgress = embeddingProgress,
                 needsEmbeddingRegeneration = needsEmbeddingRegeneration
             )
@@ -532,7 +478,7 @@ fun AssistantMemorySettings(
                     SettingsGroupHeader(title = stringResource(R.string.assistant_memory_debugger))
                     MemoryDebugger(
                         onTestRetrieval = onTestRetrieval,
-                        state = retrievalDebugState,
+                        retrievalResults = retrievalResults
                     )
                 }
             }
@@ -562,13 +508,13 @@ private fun MemorySettingsItem(
     val haptics = rememberPremiumHaptics()
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-
+    
     val scale by animateFloatAsState(
         targetValue = if (isPressed) 0.98f else 1f,
         animationSpec = spring(dampingRatio = 0.5f, stiffness = 400f),
         label = "scale"
     )
-
+    
     val topCorner by animateDpAsState(
         targetValue = when (position) {
             "ONLY", "FIRST" -> 24.dp
@@ -585,7 +531,7 @@ private fun MemorySettingsItem(
         animationSpec = spring(dampingRatio = 0.8f, stiffness = 200f),
         label = "bottomCorner"
     )
-
+    
     Surface(
         onClick = {
             if (onClick != null) {
@@ -650,7 +596,7 @@ private fun MemoryModeIndicator(mode: MemoryMode) {
         animationSpec = spring(),
         label = "modeColor"
     )
-
+    
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = backgroundColor,
@@ -766,6 +712,7 @@ private fun RagSettingsCard(
 private fun ConsolidationSettingsCard(
     assistant: Assistant,
     onUpdateAssistant: (Assistant) -> Unit,
+    onConsolidate: () -> Unit,
     showSummarizerWarning: Boolean = false,
     onNavigateToSummarizerSettings: () -> Unit = {}
 ) {
@@ -817,18 +764,21 @@ private fun ConsolidationSettingsCard(
             }
         }
 
-        if (assistant.lastConsolidationTime > 0) {
-            Surface(
-                color = if (LocalDarkMode.current) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainerHighest,
-                shape = AppShapes.ListItemLast,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+        Surface(
+            color = if (LocalDarkMode.current) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainerHighest,
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onConsolidate,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
+                    Icon(Icons.Rounded.Psychology, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.assistant_memory_consolidate_now))
+                }
+
+                if (assistant.lastConsolidationTime > 0) {
                     val time = java.time.Instant.ofEpochMilli(assistant.lastConsolidationTime)
                         .atZone(java.time.ZoneId.systemDefault())
                         .toLocalDateTime()
@@ -836,19 +786,8 @@ private fun ConsolidationSettingsCard(
                     Text(
                         text = stringResource(R.string.assistant_memory_last_run, time),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (assistant.lastConsolidationResult.isNotBlank()) {
-                        Text(
-                            text = assistant.lastConsolidationResult,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        )
-                    }
                 }
             }
         }
@@ -1360,7 +1299,7 @@ private fun MemoryItem(
 @Composable
 private fun MemoryDebugger(
     onTestRetrieval: (String) -> Unit,
-    state: MemoryRetrievalDebugState,
+    retrievalResults: List<Pair<AssistantMemory, Float>>
 ) {
     val (query, setQuery) = remember { mutableStateOf("") }
 
@@ -1397,61 +1336,23 @@ private fun MemoryDebugger(
                 )
                 Button(
                     onClick = { onTestRetrieval(query) },
-                    enabled = query.isNotBlank() && !state.isRunning,
+                    enabled = query.isNotBlank()
                 ) {
-                    if (state.isRunning) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    } else {
-                        Text(stringResource(R.string.assistant_memory_test))
-                    }
+                    Text(stringResource(R.string.assistant_memory_test))
                 }
             }
 
             AnimatedVisibility(
-                visible = state.hasRun,
+                visible = retrievalResults.isNotEmpty(),
                 enter = fadeIn() + expandVertically()
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    state.error?.let { error ->
-                        Text(
-                            text = "Retrieval failed: $error",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                    if (!state.includesCore || !state.includesEpisodes) {
-                        Text(
-                            text = buildString {
-                                append("This assistant excludes ")
-                                append(
-                                    when {
-                                        !state.includesCore && !state.includesEpisodes -> "Core and Episodic memories"
-                                        !state.includesCore -> "Core memories"
-                                        else -> "Episodic memories"
-                                    }
-                                )
-                                append(" from automatic recall.")
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
                     Text(
-                        text = if (state.results.isEmpty()) {
-                            "No candidates returned. ${state.currentEmbeddings}/${state.totalMemories} memories " +
-                                "embedded with the selected model"
-                        } else {
-                            "${state.results.size} candidates before the live " +
-                                "${String.format("%.2f", state.configuredThreshold)} cutoff"
-                        },
+                        text = stringResource(R.string.assistant_memory_results, retrievalResults.size),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    state.results.forEachIndexed { index, (memory, score) ->
+                    retrievalResults.forEachIndexed { index, (memory, score) ->
                         Surface(
                             color = if (LocalDarkMode.current) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainerHighest,
                             shape = RoundedCornerShape(10.dp)
@@ -1468,26 +1369,9 @@ private fun MemoryDebugger(
                                             String.format("%.4f", score)
                                         ),
                                         style = MaterialTheme.typography.labelMedium,
-                                        color = if (score >= state.configuredThreshold) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.error
-                                        }
+                                        color = if (score >= 0.5f) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                Text(
-                                    text = if (score >= state.configuredThreshold) {
-                                        "Score meets live cutoff"
-                                    } else {
-                                        "Score below live cutoff"
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (score >= state.configuredThreshold) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.error
-                                    },
-                                )
                                 Text(
                                     text = memory.content,
                                     style = MaterialTheme.typography.bodySmall,

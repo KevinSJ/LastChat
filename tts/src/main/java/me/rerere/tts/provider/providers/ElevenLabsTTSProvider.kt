@@ -1,14 +1,9 @@
 package me.rerere.tts.provider.providers
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.put
-import me.rerere.common.http.jsonArrayOrNull
-import me.rerere.common.http.jsonObjectOrNull
-import me.rerere.common.http.jsonPrimitiveOrNull
 import me.rerere.common.platform.PlatformHttpClient
 import me.rerere.common.platform.PlatformHttpRequest
 import me.rerere.common.platform.PlatformLog
@@ -18,6 +13,8 @@ import me.rerere.tts.model.TTSModelInfo
 import me.rerere.tts.model.TTSRequest
 import me.rerere.tts.provider.TTSProvider
 import me.rerere.tts.provider.TTSProviderSetting
+import org.json.JSONArray
+import org.json.JSONObject
 
 private const val TAG = "ElevenLabsTTSProvider"
 
@@ -28,7 +25,7 @@ class ElevenLabsTTSProvider(
         providerSetting: TTSProviderSetting.ElevenLabs,
         request: TTSRequest
     ): Flow<AudioChunk> = flow {
-        val requestBody = buildJsonObject {
+        val requestBody = JSONObject().apply {
             put("text", request.text)
             put("model_id", providerSetting.modelId)
         }
@@ -73,7 +70,7 @@ class ElevenLabsTTSProvider(
 
     override suspend fun listModels(
         providerSetting: TTSProviderSetting.ElevenLabs
-    ): List<TTSModelInfo> = withContext(me.rerere.tts.provider.ttsIoDispatcher) {
+    ): List<TTSModelInfo> = withContext(Dispatchers.IO) {
         if (providerSetting.apiKey.isBlank()) return@withContext emptyList()
         runCatching {
             val response = httpClient.execute(
@@ -92,15 +89,17 @@ class ElevenLabsTTSProvider(
                 )
                 return@withContext emptyList()
             }
-            ttsJson.parseToJsonElement(response.body.decodeToString())
-                .jsonArrayOrNull
-                .orEmpty()
-                .mapNotNull { element ->
-                    val item = element.jsonObjectOrNull ?: return@mapNotNull null
-                    val id = item["model_id"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty()
-                    val name = item["name"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty().ifBlank { id }
-                    id.takeIf(String::isNotBlank)?.let { TTSModelInfo(id = it, displayName = name) }
+            val arr = JSONArray(response.body.decodeToString())
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val item = arr.optJSONObject(i) ?: continue
+                    val id = item.optString("model_id", "")
+                    val name = item.optString("name", id)
+                    if (id.isNotBlank()) {
+                        add(TTSModelInfo(id = id, displayName = name))
+                    }
                 }
+            }
         }.getOrElse { e ->
             PlatformLog.e(TAG, "listModels error: ${e.message}")
             emptyList()

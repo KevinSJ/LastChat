@@ -1542,7 +1542,7 @@ containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceCon
                 
                 Card(
                     colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        containerColor = if (LocalDarkMode.current) Color.Black else MaterialTheme.colorScheme.surfaceContainerHigh
                     ),
                     shape = shape
                 ) {

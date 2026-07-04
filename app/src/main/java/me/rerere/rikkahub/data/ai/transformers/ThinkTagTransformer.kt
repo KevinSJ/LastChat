@@ -30,72 +30,46 @@ object ThinkTagTransformer : OutputMessageTransformer {
         return transformMessages(messages, finishUnclosed = true)
     }
 
-    internal fun transformMessages(
+    private fun transformMessages(
         messages: List<UIMessage>,
         finishUnclosed: Boolean,
     ): List<UIMessage> {
         val generationFinishedAt = if (finishUnclosed) Clock.System.now() else null
         return messages.map { message ->
-            if (message.role != MessageRole.ASSISTANT) {
+            if (message.role != MessageRole.ASSISTANT || !message.hasPart<UIMessagePart.Text>()) {
                 return@map message
             }
 
-            var transformedParts = message.parts.flatMap { part ->
-                if (part !is UIMessagePart.Text || !part.text.contains("<think", ignoreCase = true)) {
-                    return@flatMap listOf(part)
-                }
-
-                val matches = THINKING_REGEX.findAll(part.text).toList()
-                if (matches.isEmpty()) {
-                    return@flatMap listOf(part)
-                }
-
-                val resultParts = mutableListOf<UIMessagePart>()
-                val sb = StringBuilder()
-                var lastIndex = 0
-
-                for (match in matches) {
-                    sb.append(part.text, lastIndex, match.range.first)
-                    lastIndex = match.range.last + 1
-
-                    val reasoning = match.groupValues.getOrNull(1)?.trim().orEmpty()
-                    if (reasoning.isNotBlank()) {
-                        val hasClosingTag = CLOSING_TAG_REGEX.containsMatchIn(match.value)
-                        val reasoningPart = UIMessagePart.Reasoning(
-                            reasoning = reasoning,
-                            createdAt = message.createdAt.toInstant(TimeZone.currentSystemDefault()),
-                            finishedAt = when {
-                                finishUnclosed -> generationFinishedAt
-                                hasClosingTag -> Clock.System.now()
-                                else -> null
-                            },
-                            title = reasoning.extractLatestReasoningSummaryTitle()
-                        )
-                        resultParts.add(reasoningPart)
+            message.copy(
+                parts = message.parts.flatMap { part ->
+                    if (part !is UIMessagePart.Text || !THINKING_REGEX.containsMatchIn(part.text)) {
+                        return@flatMap listOf(part)
                     }
-                }
-                if (lastIndex < part.text.length) {
-                    sb.append(part.text, lastIndex, part.text.length)
-                }
 
-                val strippedText = sb.toString().trim()
-                if (strippedText.isNotEmpty() || resultParts.isEmpty()) {
-                    resultParts.add(part.copy(text = strippedText))
-                }
-                resultParts
-            }
-
-            if (finishUnclosed) {
-                transformedParts = transformedParts.map { part ->
-                    if (part is UIMessagePart.Reasoning && part.finishedAt == null) {
-                        part.copy(finishedAt = generationFinishedAt)
-                    } else {
-                        part
+                    val reasoning = THINKING_REGEX.find(part.text)?.groupValues?.getOrNull(1)?.trim().orEmpty()
+                    val strippedText = part.text.replace(THINKING_REGEX, "").trim()
+                    if (reasoning.isBlank()) {
+                        return@flatMap listOf(part.copy(text = strippedText))
                     }
-                }
-            }
 
-            message.copy(parts = transformedParts)
+                    val hasClosingTag = CLOSING_TAG_REGEX.containsMatchIn(part.text)
+                    val reasoningPart = UIMessagePart.Reasoning(
+                        reasoning = reasoning,
+                        createdAt = message.createdAt.toInstant(TimeZone.currentSystemDefault()),
+                        finishedAt = when {
+                            finishUnclosed -> generationFinishedAt
+                            hasClosingTag -> Clock.System.now()
+                            else -> null
+                        },
+                        title = reasoning.extractLatestReasoningSummaryTitle()
+                    )
+
+                    listOf(
+                        reasoningPart,
+                        part.copy(text = strippedText),
+                    )
+                }
+            )
         }
     }
 }

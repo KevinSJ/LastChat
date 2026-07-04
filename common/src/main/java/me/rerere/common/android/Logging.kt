@@ -3,17 +3,16 @@ package me.rerere.common.android
 private const val MAX_RECENT_LOGS = 100
 
 object Logging {
-    private val lock = Any()
-    private val recentLogs = ArrayDeque<String>(MAX_RECENT_LOGS)
+    private val recentLogs = arrayListOf<String>()
 
-    fun log(tag: String, message: String) = synchronized(lock) {
-        if (recentLogs.size >= MAX_RECENT_LOGS) {
-            recentLogs.removeLast()
+    fun log(tag: String, message: String) {
+        recentLogs.add(0, "$tag: $message")
+        if (recentLogs.size > MAX_RECENT_LOGS) {
+            recentLogs.removeLastOrNull()
         }
-        recentLogs.addFirst("$tag: $message")
     }
 
-    fun getRecentLogs(): List<String> = synchronized(lock) {
-        recentLogs.toList()
+    fun getRecentLogs(): List<String> {
+        return recentLogs
     }
 }

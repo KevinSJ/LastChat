@@ -233,7 +233,7 @@ private fun TemplateCard(
             .lastChatBlurEffect(cardColor, AppShapes.CardMedium),
         shape = AppShapes.CardMedium,
         colors = CardDefaults.cardColors(containerColor = blurredContainerColor(cardColor)),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.background),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
@@ -276,7 +276,7 @@ private fun ActionPill(
         MaterialTheme.colorScheme.surface
     }
     val borderColor = if (hasBackgroundImage) {
-        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+        MaterialTheme.colorScheme.background
     } else {
         MaterialTheme.colorScheme.outlineVariant
     }

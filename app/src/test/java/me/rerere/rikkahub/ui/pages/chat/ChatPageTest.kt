@@ -157,28 +157,14 @@ class ChatPageTest {
 
     @Test
     fun chatListPaddingSwitchesWithToolbarPlacement() {
-        val statusBarPadding = 24.dp
-        assertEquals(120.dp, chatListTopPadding(chatTopBarPlacement(Settings()), statusBarPadding))
+        assertEquals(88.dp, chatListTopPadding(chatTopBarPlacement(Settings())))
         assertEquals(140.dp, chatListBottomPadding(chatTopBarPlacement(Settings())))
 
         val bottomPlacement = chatTopBarPlacement(
             Settings(displaySetting = DisplaySetting(chatToolbarAtBottom = true))
         )
-        assertEquals(60.dp, chatListTopPadding(bottomPlacement, statusBarPadding))
+        assertEquals(16.dp, chatListTopPadding(bottomPlacement))
         assertEquals(204.dp, chatListBottomPadding(bottomPlacement))
-    }
-
-    @Test
-    fun contextPopupUsesTheSameToolbarClearanceAsTheChatDropdown() {
-        val topPlacement = chatTopBarPlacement(Settings())
-        assertEquals(64.dp, chatToolbarPopupTopPadding(topPlacement))
-        assertEquals(0.dp, chatToolbarPopupBottomPadding(topPlacement))
-
-        val bottomPlacement = chatTopBarPlacement(
-            Settings(displaySetting = DisplaySetting(chatToolbarAtBottom = true))
-        )
-        assertEquals(0.dp, chatToolbarPopupTopPadding(bottomPlacement))
-        assertEquals(72.dp, chatToolbarPopupBottomPadding(bottomPlacement))
     }
 
     @Test

@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools
 
 import android.content.Context
-import com.whl.quickjs.android.QuickJSLoader
 import com.whl.quickjs.wrapper.QuickJSContext
 import com.whl.quickjs.wrapper.QuickJSObject
 import kotlinx.serialization.KSerializer
@@ -38,7 +37,6 @@ import me.rerere.rikkahub.data.datastore.TtsFilterMode
 import me.rerere.rikkahub.data.datastore.getEffectiveTTSProvider
 import me.rerere.rikkahub.utils.stripMarkdown
 import me.rerere.tts.controller.TtsController
-import me.rerere.tts.controller.AudioPlayer
 import me.rerere.tts.provider.android.TTSManager
 import kotlin.uuid.Uuid
 
@@ -231,22 +229,22 @@ class LocalTools(
                 )
             },
             execute = {
+                val context = QuickJSContext.create()
                 val code = it.jsonObject["code"]?.jsonPrimitive?.contentOrNull
-                QuickJSLoader.init()
-                val resultText = QuickJSContext.create().use { context ->
-                    when (val result = context.evaluate(code)) {
-                        is QuickJSObject -> result.stringify()
-                        else -> result.toString()
-                    }
-                }
+                val result = context.evaluate(code)
                 buildJsonObject {
-                    put("result", resultText)
+                    put(
+                        "result", when (result) {
+                            is QuickJSObject -> JsonPrimitive(result.stringify())
+                            else -> JsonPrimitive(result.toString())
+                        }
+                    )
                 }
             }
         )
     }
 
-    private val ttsController by lazy { TtsController(ttsManager, AudioPlayer(context)) }
+    private val ttsController by lazy { TtsController(context, ttsManager) }
 
     val ttsTool by lazy {
         Tool(

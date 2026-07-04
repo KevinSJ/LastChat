@@ -126,7 +126,7 @@ class ProotShellRunner(
             command += "--ashmem-memfd"
         }
         if (!mode.minimalFlags) {
-            command += "-0"
+            command += "--root-id"
             command += "--link2symlink"
             command += "--kill-on-exit"
         }
@@ -383,7 +383,7 @@ class ProotShellRunner(
             command += "--ashmem-memfd"
         }
         if (!mode.minimalFlags) {
-            command += "-0"
+            command += "--root-id"
             command += "--link2symlink"
             command += "--kill-on-exit"
         }

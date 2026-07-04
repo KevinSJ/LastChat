@@ -80,24 +80,12 @@ android {
         minSdk = 28
         targetSdk = 36
         versionCode = 34
-        versionName = "1.4.6"
+        versionName = "1.4.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
-        }
-    }
-
-    flavorDimensions += "version"
-
-    productFlavors {
-        create("stable") {
-            dimension = "version"
-        }
-        create("dev") {
-            dimension = "version"
-            applicationIdSuffix = ".dev"
         }
     }
 
@@ -232,7 +220,6 @@ tasks.register("buildAll") {
 
 tasks.named("preBuild") {
     dependsOn(buildWebUi)
-    dependsOn(":speech:downloadSherpaOnnxAar")
 }
 
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
@@ -255,7 +242,6 @@ kotlin {
 
 
 dependencies {
-    implementation(project(":ui-core"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.process)
@@ -276,6 +262,12 @@ dependencies {
 
     // Navigation 2
     implementation(libs.androidx.navigation2)
+
+    // Navigation 3
+//    implementation(libs.androidx.navigation3.runtime)
+//    implementation(libs.androidx.navigation3.ui)
+//    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+//    implementation(libs.androidx.material3.adaptive.navigation3)
 
     // Firebase (Analytics removed for privacy - only crash reporting and remote config)
     implementation(platform(libs.firebase.bom))
@@ -309,7 +301,8 @@ dependencies {
     // okhttp
     implementation(libs.okhttp)
     implementation(libs.okhttp.sse)
-    implementation(libs.okhttp.dnsoverhttps)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.serialization.json)
 
     // ktor client
     implementation(libs.ktor.client.core)
@@ -364,8 +357,17 @@ dependencies {
         exclude(group = "org.ogce", module = "xpp3")
     }
 
+    // Apache Commons Text
+    implementation(libs.commons.text)
+
+    // Toast (Sonner)
+    implementation(libs.sonner)
+
     // Reorderable (https://github.com/Calvin-LL/Reorderable/)
     implementation(libs.reorderable)
+
+    // lucide icons
+    implementation(libs.lucide.icons)
 
     // image viewer
     implementation(libs.image.viewer)
@@ -387,13 +389,10 @@ dependencies {
     implementation(project(":search"))
     implementation(project(":tts"))
     implementation(project(":speech"))
-    // sherpa-onnx AAR must be provided at the app level because :speech uses compileOnly
-    // (AGP forbids direct local AAR deps inside library modules)
-    implementation(files(rootProject.file("speech/build/sherpa/sherpa-onnx-1.13.4.aar")))
     implementation(project(":common"))
     implementation(project(":workspace"))
-    implementation(project(":local-llm"))
     implementation(libs.jsoup)
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
     implementation(kotlin("reflect"))
     implementation(libs.termux.terminal.view)
     implementation(libs.termux.terminal.emulator)
@@ -402,12 +401,16 @@ dependencies {
     implementation(libs.androidx.glance)
     implementation(libs.androidx.glance.material3)
 
+    // Leak Canary
+    // debugImplementation(libs.leakcanary.android)
+
     // tests
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
+    androidTestImplementation("io.ktor:ktor-server-sse:3.2.3")
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }

@@ -1,9 +1,9 @@
 package me.rerere.tts.provider.providers
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import kotlinx.coroutines.withContext
 import me.rerere.common.platform.PlatformHttpClient
 import me.rerere.common.platform.PlatformHttpRequest
 import me.rerere.common.platform.PlatformLog
@@ -13,6 +13,7 @@ import me.rerere.tts.model.TTSModelInfo
 import me.rerere.tts.model.TTSRequest
 import me.rerere.tts.provider.TTSProvider
 import me.rerere.tts.provider.TTSProviderSetting
+import org.json.JSONObject
 
 private const val TAG = "FishAudioTTSProvider"
 
@@ -24,16 +25,16 @@ class FishAudioTTSProvider(
         providerSetting: TTSProviderSetting.FishAudio,
         request: TTSRequest
     ): Flow<AudioChunk> = flow {
-        val requestBody = buildJsonObject {
+        val requestBody = JSONObject().apply {
             put("text", request.text)
             if (providerSetting.referenceId.isNotBlank()) {
                 put("reference_id", providerSetting.referenceId)
             }
-            put("temperature", providerSetting.temperature.toTtsJsonNumber())
+            put("temperature", providerSetting.temperature.toDouble())
             put("top_p", providerSetting.topP.toDouble())
             put("format", providerSetting.format)
-            put("prosody", buildJsonObject {
-                put("speed", providerSetting.speed.toTtsJsonNumber())
+            put("prosody", JSONObject().apply {
+                put("speed", providerSetting.speed.toDouble())
             })
             put("normalize", true)
             put("chunk_length", 300)

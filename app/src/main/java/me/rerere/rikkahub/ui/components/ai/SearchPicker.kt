@@ -378,7 +378,8 @@ private fun SearchToggleItem(
     isAmoled: Boolean,
     isDarkMode: Boolean
 ) {
-    val containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    // Use surfaceContainerHigh for Light Mode consistency
+    val containerColor = if (isDarkMode) Color.Black else MaterialTheme.colorScheme.surfaceContainerHigh
     val contentColor = MaterialTheme.colorScheme.onSurface
     
     Row(
@@ -454,8 +455,10 @@ private fun SearchProviderItem(
     // Animated colors for smooth selection transition
     val targetContainerColor = if (isSelected) {
         MaterialTheme.colorScheme.primaryContainer
+    } else if (isDarkMode) {
+        Color.Black
     } else {
-        MaterialTheme.colorScheme.surfaceContainerHighest
+        MaterialTheme.colorScheme.surfaceContainerHigh
     }
     val targetContentColor = if (isSelected) {
         MaterialTheme.colorScheme.onPrimaryContainer
@@ -511,7 +514,7 @@ private fun BuiltInSearchSetting(
     val isDarkMode = LocalDarkMode.current
     val isAmoled = amoledMode && isDarkMode
     
-    val containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    val containerColor = if (isDarkMode) Color.Black else MaterialTheme.colorScheme.surfaceContainerHigh
     val contentColor = if (isAmoled) Color.White else MaterialTheme.colorScheme.onSurface
 
     CompositionLocalProvider(LocalAbsoluteTonalElevation provides 0.dp) {

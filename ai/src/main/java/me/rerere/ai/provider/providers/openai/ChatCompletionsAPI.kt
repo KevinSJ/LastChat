@@ -75,7 +75,7 @@ class ChatCompletionsAPI(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): MessageChunk = withContext(me.rerere.ai.util.providerIoDispatcher) {
+    ): MessageChunk = withContext(Dispatchers.IO) {
         val requestBody =
             buildChatCompletionRequest(
                 messages = messages,
@@ -414,18 +414,15 @@ class ChatCompletionsAPI(
 
                     else -> {
                         // OpenAI 官方
-                        // 支持 "none", "low", "medium", "high", "max"
+                        // 文档中，只支持 "low", "medium", "high"
                         if (level != ReasoningLevel.AUTO && level != ReasoningLevel.OFF) {
-                            put("reasoning_effort", level.effort)
+                            put("reasoning_effort", if(level.effort == "minimal") "low" else level.effort)
                         } else if (level == ReasoningLevel.OFF) {
                             // Suppress reasoning mode on local fast-tier LLMs (e.g. LM Studio, vLLM, Ollama)
                             // This acts as a Jinja template override for models like Qwen 3.5
                             put("chat_template_kwargs", buildJsonObject {
                                 put("enable_thinking", false)
                             })
-                            if (params.model.modelId.contains(Regex("gpt-5|gpt-4o|o[134]"))) {
-                                put("reasoning_effort", "none")
-                            }
                         }
                     }
                 }

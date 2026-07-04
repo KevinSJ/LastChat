@@ -10,18 +10,8 @@ data class McpCommonOptions(
     val enable: Boolean = true,
     val name: String = "",
     val headers: List<Pair<String, String>> = emptyList(),
-    val tools: List<McpTool> = emptyList(),
-    val authMode: McpAuthMode = McpAuthMode.CUSTOM_HEADERS,
-    val presetId: String? = null,
+    val tools: List<McpTool> = emptyList()
 )
-
-@Serializable
-enum class McpAuthMode {
-    NONE,
-    OAUTH,
-    CUSTOM_HEADERS,
-    EXTERNAL_OAUTH_SETUP,
-}
 
 @Serializable
 data class McpTool(
@@ -65,9 +55,3 @@ sealed class McpServerConfig {
         }
     }
 }
-
-val McpServerConfig.endpointUrl: String
-    get() = when (this) {
-        is McpServerConfig.SseTransportServer -> url
-        is McpServerConfig.StreamableHTTPServer -> url
-    }

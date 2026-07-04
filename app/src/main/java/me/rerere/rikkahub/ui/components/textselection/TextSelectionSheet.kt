@@ -144,7 +144,7 @@ fun TextSelectionSheet(
                             onClick = {} // Consume click to prevent dismissing
                         ),
                     shape = QuickAskOuterShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    color = if (amoledMode && isDarkMode) Color.Black else MaterialTheme.colorScheme.surfaceContainerLow,
                     tonalElevation = 8.dp
                 ) {
                     AnimatedContent(
@@ -331,7 +331,7 @@ private fun QuickActionButton(
                     onClick()
                 },
             shape = shape,
-            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            color = if (amoledMode && isDarkMode) Color.Black else MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = if (amoledMode && isDarkMode) 0.dp else 6.dp,
         ) {
             Row(

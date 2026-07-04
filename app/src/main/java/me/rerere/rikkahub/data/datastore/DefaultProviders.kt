@@ -1,8 +1,20 @@
 package me.rerere.rikkahub.data.datastore
 
+import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.ProviderSetting
+import kotlin.uuid.Uuid
 
-// A fresh install starts with an empty provider list. No providers are seeded — the user adds
-// them (including the on-device "Local" provider) via the provider presets / first-time setup.
-// See ProviderPresets.kt (SPECIAL_PROVIDER_PRESETS).
-val DEFAULT_PROVIDERS = emptyList<ProviderSetting>()
+val DEFAULT_PROVIDERS = listOf(
+    ProviderSetting.OpenAI(
+        id = Uuid.parse("d5734028-d39b-4d41-9841-fd648d65440e"),
+        name = "OpenRouter",
+        baseUrl = "https://openrouter.ai/api/v1",
+        apiKey = "",
+        builtIn = true,
+        balanceOption = BalanceOption(
+            enabled = true,
+            apiPath = "/credits",
+            resultPath = "data.total_credits - data.total_usage",
+        )
+    ),
+)

@@ -42,7 +42,7 @@ import kotlin.uuid.Uuid
 class ConversationRepository(
     private val context: Context,
     private val conversationDAO: ConversationDAO,
-    private val memoryRepository: MemoryRepository,
+    private val chatEpisodeDAO: me.rerere.rikkahub.data.db.dao.ChatEpisodeDAO,
     private val dailyActivityDAO: DailyActivityDAO,
     private val usageStatsDAO: UsageStatsDAO,
     private val chatAttachmentRepository: ChatAttachmentRepository,
@@ -75,13 +75,6 @@ class ConversationRepository(
         ).map { conversationEntityToConversation(it) }
     }
 
-    suspend fun getPendingMemoryConversations(assistantId: Uuid, limit: Int = 25): List<Conversation> {
-        return conversationDAO.getPendingMemoryConversations(
-            assistantId = assistantId.toString(),
-            limit = limit,
-        ).map { conversationEntityToConversation(it) }
-    }
-
     fun getConversationsOfAssistant(assistantId: Uuid): Flow<List<Conversation>> {
         return conversationDAO
             .getConversationsOfAssistant(assistantId.toString())
@@ -89,6 +82,13 @@ class ConversationRepository(
                 flow.map { entity ->
                     conversationEntityToConversation(entity)
                 }
+            }
+    }
+
+    fun getAllLightConversations(): Flow<List<Conversation>> {
+        return conversationDAO.getAllLight()
+            .map { list ->
+                list.map { conversationSummaryToConversation(it) }
             }
     }
 
@@ -103,6 +103,68 @@ class ConversationRepository(
         pagingData.map { entity ->
             conversationSummaryToConversation(entity)
         }
+    }
+
+    fun searchConversations(titleKeyword: String): Flow<List<Conversation>> {
+        return conversationDAO
+            .searchConversations(titleKeyword)
+            .map { list ->
+                list.map { entity ->
+                    conversationEntityToConversation(entity)
+                }.filter { conversation ->
+                    conversation.title.contains(titleKeyword, ignoreCase = true) ||
+                        conversation.messageNodes.any { node ->
+                            node.currentMessage.toText().contains(titleKeyword, ignoreCase = true)
+                        }
+                }
+            }
+    }
+
+    fun searchConversationsPaging(titleKeyword: String): Flow<PagingData<Conversation>> = Pager(
+        config = PagingConfig(
+            pageSize = PAGE_SIZE,
+            initialLoadSize = INITIAL_LOAD_SIZE,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = { conversationDAO.searchConversationsPaging(titleKeyword) }
+    ).flow.map { pagingData ->
+        pagingData.map { entity ->
+            conversationSummaryToConversation(entity)
+        }.filter { conversation ->
+            if (conversation.title.contains(titleKeyword, ignoreCase = true)) {
+                true
+            } else {
+                val fullEntity = withContext(Dispatchers.IO) {
+                    conversationDAO.getConversationById(conversation.id.toString())
+                }
+                if (fullEntity != null) {
+                    val messageNodes = runCatching {
+                        JsonInstant.decodeFromString<List<MessageNode>>(fullEntity.nodes)
+                    }.getOrNull() ?: emptyList()
+                    
+                    messageNodes.any { node ->
+                        node.currentMessage.toText().contains(titleKeyword, ignoreCase = true)
+                    }
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
+    fun searchConversationsOfAssistant(assistantId: Uuid, titleKeyword: String): Flow<List<Conversation>> {
+        return conversationDAO
+            .searchConversationsOfAssistant(assistantId.toString(), titleKeyword)
+            .map { list ->
+                list.map { entity ->
+                    conversationEntityToConversation(entity)
+                }.filter { conversation ->
+                    conversation.title.contains(titleKeyword, ignoreCase = true) ||
+                        conversation.messageNodes.any { node ->
+                            node.currentMessage.toText().contains(titleKeyword, ignoreCase = true)
+                        }
+                }
+            }
     }
 
     fun searchConversationsOfAssistantPaging(assistantId: Uuid, titleKeyword: String): Flow<PagingData<Conversation>> = Pager(
@@ -153,16 +215,8 @@ class ConversationRepository(
         try { usageStatsDAO.incrementConversations() } catch (_: Exception) {}
     }
 
-    suspend fun updateConversation(
-        conversation: Conversation,
-        preserveConsolidation: Boolean = false,
-        syncAttachments: Boolean = true,
-    ) {
-        val syncedConversation = if (syncAttachments) {
-            chatAttachmentRepository.syncConversationAttachments(conversation)
-        } else {
-            conversation
-        }
+    suspend fun updateConversation(conversation: Conversation, preserveConsolidation: Boolean = false) {
+        val syncedConversation = chatAttachmentRepository.syncConversationAttachments(conversation)
         // Invalidation Logic: If a consolidated conversation is updated (e.g. new message),
         // we must invalidate the old memory episode to allow re-consolidation.
         if (shouldInvalidateConsolidation(syncedConversation, preserveConsolidation)) {
@@ -174,12 +228,13 @@ class ConversationRepository(
 
             // Delete the old episode based on conversation ID if possible.
             // If deletion by ID returns 0 (e.g. legacy episode without conversationId),
-            // only delete a legacy episode with the conversation's exact start time.
-            val deletedCount = memoryRepository.deleteEpisodesByConversationId(conversation.id.toString())
+            // fallback to best-effort deletion based on time range.
+            val deletedCount = chatEpisodeDAO.deleteEpisodeByConversationId(conversation.id.toString())
             if (deletedCount == 0) {
-                memoryRepository.deleteLegacyEpisodesForConversation(
+                chatEpisodeDAO.deleteEpisodeByTimeRange(
                     assistantId = syncedConversation.assistantId.toString(),
-                    conversationStartTime = syncedConversation.createAt.toEpochMilli(),
+                    startTime = syncedConversation.createAt.toEpochMilli(),
+                    endTime = Long.MAX_VALUE
                 )
             }
         } else {
@@ -193,7 +248,7 @@ class ConversationRepository(
         conversationDAO.delete(
             conversationToConversationEntity(conversation)
         )
-        memoryRepository.deleteEpisodesByConversationId(conversation.id.toString())
+        chatEpisodeDAO.deleteEpisodeByConversationId(conversation.id.toString())
         chatAttachmentRepository.removeConversationReferences(conversation.id)
     }
 
@@ -285,10 +340,34 @@ class ConversationRepository(
         )
     }
 
+    fun getPinnedConversations(): Flow<List<Conversation>> {
+        return conversationDAO
+            .getPinnedConversations()
+            .map { flow ->
+                flow.map { entity ->
+                    conversationEntityToConversation(entity)
+                }
+            }
+    }
+
     suspend fun togglePinStatus(conversationId: Uuid) {
         conversationDAO.updatePinStatus(
             id = conversationId.toString(),
             isPinned = !(getConversationById(conversationId)?.isPinned ?: false)
+        )
+    }
+
+    suspend fun markAsConsolidated(conversationId: Uuid) {
+        conversationDAO.updateConsolidatedStatus(
+            id = conversationId.toString(),
+            isConsolidated = true
+        )
+    }
+
+    suspend fun markAsNotConsolidated(conversationId: Uuid) {
+        conversationDAO.updateConsolidatedStatus(
+            id = conversationId.toString(),
+            isConsolidated = false
         )
     }
 
@@ -301,11 +380,11 @@ class ConversationRepository(
     }
 
     suspend fun getEpisodeCount(): Int {
-        return memoryRepository.getEpisodeCount()
+        return chatEpisodeDAO.getCount()
     }
 
     fun getEpisodeCountFlow(): Flow<Int> {
-        return memoryRepository.getEpisodeCountFlow()
+        return chatEpisodeDAO.getCountFlow()
     }
 
     fun getAllConversations(): Flow<List<Conversation>> {
@@ -315,9 +394,29 @@ class ConversationRepository(
             }
     }
 
+    // Optimized stats queries - delegate to SQL for performance
+    fun getConversationCountFlow(): Flow<Int> = conversationDAO.getConversationCountFlow()
+
+    fun getDistinctCreateDatesFlow(): Flow<List<String>> = conversationDAO.getDistinctCreateDatesFlow()
+
+    fun getMostActiveAssistantIdFlow(): Flow<String?> = conversationDAO.getMostActiveAssistantFlow()
+        .map { it?.assistantId }
+
+    fun getConversationHoursFlow(): Flow<List<Int>> = conversationDAO.getConversationHoursFlow()
+
+    fun getConversationCountByAssistantFlow(assistantId: String): Flow<Int> = 
+        conversationDAO.getConversationCountByAssistantFlow(assistantId)
+
     suspend fun hasSuccessfulAssistantReply(): Boolean = withContext(Dispatchers.IO) {
         conversationDAO.hasUserAssistantConversation()
     }
+
+    /**
+     * Get the most frequently used model ID for an assistant using the last_model_id column.
+     * Returns the model UUID as string, or null if no model found.
+     */
+    fun getMostUsedModelIdForAssistantFlow(assistantId: String): Flow<String?> = 
+        kotlinx.coroutines.flow.flow { emit(conversationDAO.getMostUsedModelIdForAssistant(assistantId)) }
 
     // ===== Daily Activity Tracking (for the activity heatmap) =====
     
@@ -343,6 +442,17 @@ class ConversationRepository(
                 delay(delaysMs[attempt])
             }
         }
+    }
+    
+    fun getWeeklyActivityFlow(startDate: String): Flow<List<me.rerere.rikkahub.data.db.entity.DailyActivityEntity>> =
+        dailyActivityDAO.getWeeklyActivityFlow(startDate)
+    
+    /**
+     * Check if user has sent a message today.
+     */
+    fun hasChattedTodayFlow(): Flow<Boolean> {
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        return dailyActivityDAO.hasActivityForDateFlow(today)
     }
     
     /**
@@ -453,6 +563,9 @@ class ConversationRepository(
     suspend fun initUsageStats() {
         usageStatsDAO.initIfEmpty()
     }
+    
+    /** Get usage stats as a Flow for reactive UI */
+    fun getUsageStatsFlow(): Flow<UsageStatsEntity?> = usageStatsDAO.getStatsFlow()
 
     /**
      * 12-month rolling usage stats for the statistics page.
@@ -560,9 +673,19 @@ class ConversationRepository(
     /** Get all daily activity entries for heatmap */
     fun getAllDailyActivityFlow() = dailyActivityDAO.getAllActivityFlow()
     
+    /** Increment the persistent conversation counter */
+    suspend fun incrementConversationCount() {
+        usageStatsDAO.incrementConversations()
+    }
+    
     /** Add token usage to persistent cumulative counters */
     suspend fun addTokenUsage(inputTokens: Long, outputTokens: Long, cachedTokens: Long) {
         usageStatsDAO.addTokenUsage(inputTokens, outputTokens, cachedTokens)
+    }
+    
+    /** Increment persistent message counter */
+    suspend fun incrementMessageCount(count: Int = 1) {
+        usageStatsDAO.incrementMessages(count)
     }
     
     /** Increment app launch counter */

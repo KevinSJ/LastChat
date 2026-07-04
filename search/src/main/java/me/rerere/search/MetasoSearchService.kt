@@ -35,7 +35,7 @@ object MetasoSearchService : SearchService<SearchServiceOptions.MetasoOptions> {
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.MetasoOptions
-    ): Result<SearchResult> = withContext(searchIoDispatcher) {
+    ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
 

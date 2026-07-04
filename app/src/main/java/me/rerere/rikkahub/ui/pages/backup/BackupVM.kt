@@ -14,7 +14,6 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.data.ai.models.ModelMetadataResolver
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.sync.WebDavBackupItem
 import me.rerere.rikkahub.data.sync.importer.ChatboxImporter
@@ -83,9 +82,7 @@ class BackupVM(
     }
 
     suspend fun exportToFile(): File {
-        return webdavSync.prepareBackupFile(
-            settings.value.webDavConfig.copy(items = WebDavConfig.BackupItem.entries)
-        )
+        return webdavSync.prepareBackupFile(settings.value.webDavConfig.copy())
     }
 
     suspend fun restoreFromLocalFile(file: File): WebdavSync.RestoreResult {
@@ -168,12 +165,10 @@ class BackupVM(
 
     private fun providerImportKey(provider: ProviderSetting): String {
         return when (provider) {
-            is ProviderSetting.Codex -> "codex|${provider.id}"
             is ProviderSetting.OpenAI -> "openai|${provider.baseUrl}|${provider.apiKey}"
             is ProviderSetting.Google -> "google|${provider.baseUrl}|${provider.apiKey}"
             is ProviderSetting.Claude -> "claude|${provider.baseUrl}|${provider.apiKey}"
             is ProviderSetting.ComfyUI -> "comfyui|${provider.baseUrl}|${provider.workflowJson.hashCode()}"
-            is ProviderSetting.LiteRtLocal -> "litert_local"
         }
     }
 }

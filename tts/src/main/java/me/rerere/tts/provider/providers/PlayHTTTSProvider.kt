@@ -1,12 +1,9 @@
 package me.rerere.tts.provider.providers
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.put
-import me.rerere.common.http.jsonObjectOrNull
-import me.rerere.common.http.jsonPrimitiveOrNull
+import kotlinx.coroutines.withContext
 import me.rerere.common.platform.PlatformHttpClient
 import me.rerere.common.platform.PlatformHttpRequest
 import me.rerere.common.platform.PlatformLog
@@ -17,6 +14,7 @@ import me.rerere.tts.model.TTSModelInfo
 import me.rerere.tts.model.TTSRequest
 import me.rerere.tts.provider.TTSProvider
 import me.rerere.tts.provider.TTSProviderSetting
+import org.json.JSONObject
 
 private const val TAG = "PlayHTTTSProvider"
 
@@ -28,13 +26,13 @@ class PlayHTTTSProvider(
         providerSetting: TTSProviderSetting.PlayHT,
         request: TTSRequest
     ): Flow<AudioChunk> = flow {
-        val requestBody = buildJsonObject {
+        val requestBody = JSONObject().apply {
             put("text", request.text)
             put("voice", providerSetting.voice)
             put("voice_engine", providerSetting.voiceEngine)
             put("quality", providerSetting.quality)
             put("output_format", providerSetting.outputFormat)
-            put("speed", providerSetting.speed.toTtsJsonNumber())
+            put("speed", providerSetting.speed.toDouble())
         }
 
         PlatformLog.i(
@@ -66,11 +64,10 @@ class PlayHTTTSProvider(
                     if (!audioEmitted) {
                         val data = event.data
                         runCatching {
-                            val json = ttsJson.parseToJsonElement(data).jsonObjectOrNull
-                                ?: return@runCatching
-                            val audioUrl = json["url"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty()
-                                .ifBlank { json["audio"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty() }
-                                .ifBlank { json["output"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty() }
+                            val json = JSONObject(data)
+                            val audioUrl = json.optString("url", "")
+                                .ifBlank { json.optString("audio", "") }
+                                .ifBlank { json.optString("output", "") }
 
                             if (audioUrl.startsWith("http")) {
                                 val audioResponse = httpClient.execute(

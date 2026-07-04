@@ -38,14 +38,8 @@ class AndroidHighlighter(ctx: Context) : Highlighter {
         context.globalObject.getJSFunction("highlight")
     }
 
-    private val cache = android.util.LruCache<Pair<String, String>, List<HighlightToken>>(128)
-
     override suspend fun highlight(code: String, language: String): List<HighlightToken> =
         withContext(dispatcher) {
-            val cacheKey = code to language
-            val cached = cache.get(cacheKey)
-            if (cached != null) return@withContext cached
-
             try {
                 val result = highlightFn.call(code, language)
                 require(result is QuickJSArray) {
@@ -62,21 +56,16 @@ class AndroidHighlighter(ctx: Context) : Highlighter {
                             )
 
                             is QuickJSObject -> {
-                                try {
-                                    val json = element.stringify()
-                                    val token = format.decodeFromString<HighlightToken.Token>(
-                                        HighlightTokenSerializer, json
-                                    )
-                                    tokens.add(token)
-                                } finally {
-                                    element.release()
-                                }
+                                val json = element.stringify()
+                                val token = format.decodeFromString<HighlightToken.Token>(
+                                    HighlightTokenSerializer, json
+                                )
+                                tokens.add(token)
                             }
 
                             else -> error("Unknown type: ${element?.let { it::class.qualifiedName } ?: "null"}")
                         }
                     }
-                    cache.put(cacheKey, tokens)
                     tokens
                 } finally {
                     result.release()
@@ -91,7 +80,6 @@ class AndroidHighlighter(ctx: Context) : Highlighter {
 
     override fun destroy() {
         runBlocking(dispatcher) {
-            cache.evictAll()
             if (contextLazy.isInitialized()) {
                 context.destroy()
             }
@@ -102,6 +90,7 @@ class AndroidHighlighter(ctx: Context) : Highlighter {
         val format: Json by lazy {
             Json {
                 ignoreUnknownKeys = true
+                prettyPrint = true
             }
         }
     }

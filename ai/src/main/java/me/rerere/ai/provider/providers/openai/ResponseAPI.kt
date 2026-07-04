@@ -154,7 +154,7 @@ class ResponseAPI(
         }
     }
 
-    fun buildRequestBody(
+    private fun buildRequestBody(
         messages: List<UIMessage>,
         params: TextGenerationParams,
         stream: Boolean
@@ -167,7 +167,7 @@ class ResponseAPI(
         )
     }
 
-    fun buildRequestBody(
+    private fun buildRequestBody(
         messages: List<UIMessage>,
         params: TextGenerationParams,
         stream: Boolean,
@@ -339,7 +339,7 @@ class ResponseAPI(
         }
     }
 
-    fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
+    private fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
         val chunkType = jsonObject["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
 
         when (chunkType) {
@@ -616,8 +616,7 @@ class ResponseAPI(
             ?: jsonObject.firstPositiveIntOrNull("prompt_cache_miss_tokens")
             ?: 0
         val effectivePromptTokens = if (promptTokens > 0) {
-            // OpenAI reports cache reads/writes as subsets of input_tokens, not additional input.
-            promptTokens
+            promptTokens + cacheReadTokens + cacheCreationTokens
         } else {
             cacheReadTokens + cacheMissTokens + cacheCreationTokens
         }

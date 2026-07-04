@@ -111,9 +111,6 @@ fun ProviderConfigure(
     modifier: Modifier = Modifier,
     showSavingIndicator: Boolean = false,
     showEnabledToggle: Boolean = true,
-    showProviderTypeSelector: Boolean = true,
-    enabledToggleEnabled: Boolean = true,
-    enabledSupportingText: String? = null,
     onEdit: (provider: ProviderSetting) -> Unit
 ) {
     val context = LocalContext.current
@@ -143,36 +140,27 @@ fun ProviderConfigure(
     ) {
         // 1. Enable/Disable Toggle with text
         if (showEnabledToggle) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (provider.enabled) {
-                            stringResource(id = R.string.setting_provider_page_enabled)
-                        } else {
-                            stringResource(id = R.string.setting_provider_page_disabled)
-                        },
-                    )
-                    enabledSupportingText?.let { supportingText ->
-                        Text(
-                            text = supportingText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (provider.enabled) {
+                        stringResource(id = R.string.setting_provider_page_enabled)
+                    } else {
+                        stringResource(id = R.string.setting_provider_page_disabled)
+                    },
+                    modifier = Modifier.weight(1f)
+                )
                 AutoSaveIndicator(visible = showSavingIndicator)
                 androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(12.dp))
                 HapticSwitch(
                     checked = provider.enabled,
-                    enabled = enabledToggleEnabled,
                     onCheckedChange = { enabled ->
                         val updated = when (provider) {
-                            is ProviderSetting.Codex -> provider.copy(enabled = enabled)
                             is ProviderSetting.OpenAI -> provider.copy(enabled = enabled)
                             is ProviderSetting.Google -> provider.copy(enabled = enabled)
                             is ProviderSetting.Claude -> provider.copy(enabled = enabled)
                             is ProviderSetting.ComfyUI -> provider.copy(enabled = enabled)
-                            is ProviderSetting.LiteRtLocal -> provider.copy(enabled = enabled)
                         }
                         onEdit(updated)
                     }
@@ -183,7 +171,7 @@ fun ProviderConfigure(
         }
 
         // 2. Type selector (for non-built-in remote providers)
-        if (showProviderTypeSelector && !provider.builtIn && provider !is ProviderSetting.ComfyUI) {
+        if (!provider.builtIn && provider !is ProviderSetting.ComfyUI) {
             ProviderTypeSelector(
                 selectedType = provider::class,
                 onTypeSelected = { type ->
@@ -219,12 +207,10 @@ fun ProviderConfigure(
                 value = provider.name,
                 onValueChange = { newName ->
                     val updated = when (provider) {
-                        is ProviderSetting.Codex -> provider.copy(name = newName)
                         is ProviderSetting.OpenAI -> provider.copy(name = newName)
                         is ProviderSetting.Google -> provider.copy(name = newName)
                         is ProviderSetting.Claude -> provider.copy(name = newName)
                         is ProviderSetting.ComfyUI -> provider.copy(name = newName)
-                        is ProviderSetting.LiteRtLocal -> provider.copy(name = newName)
                     }
                     onEdit(updated)
                 },
@@ -237,7 +223,6 @@ fun ProviderConfigure(
 
         // 4. Provider-specific configuration
         when (provider) {
-            is ProviderSetting.Codex -> {}
             is ProviderSetting.OpenAI -> {
                 ProviderConfigureOpenAI(provider, onEdit)
             }
@@ -253,8 +238,6 @@ fun ProviderConfigure(
             is ProviderSetting.ComfyUI -> {
                 ProviderConfigureComfyUI(provider, onEdit)
             }
-
-            is ProviderSetting.LiteRtLocal -> Unit // configured via the dedicated on-device screen
         }
     }
 }
@@ -363,12 +346,10 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
 
     val convertedName = convertProviderNameTo(type)
     val apiKey = when (this) {
-        is ProviderSetting.Codex -> ""
         is ProviderSetting.OpenAI -> this.apiKey
         is ProviderSetting.Google -> this.apiKey
         is ProviderSetting.Claude -> this.apiKey
         is ProviderSetting.ComfyUI -> ""
-        is ProviderSetting.LiteRtLocal -> ""
     }
 
     val sourceBaseUrl = when (this) {

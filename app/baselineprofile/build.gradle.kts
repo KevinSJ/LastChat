@@ -1,5 +1,3 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     alias(libs.plugins.android.test)
     alias(libs.plugins.kotlin.android)
@@ -15,6 +13,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    kotlinOptions {
+        jvmTarget = "11"
+    }
+
     defaultConfig {
         minSdk = 28
         targetSdk = 36
@@ -22,25 +24,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    flavorDimensions += "version"
-
-    productFlavors {
-        create("stable") {
-            dimension = "version"
-        }
-        create("dev") {
-            dimension = "version"
-        }
-    }
-
     targetProjectPath = ":app"
 
-}
-
-kotlin {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_11)
-    }
 }
 
 // This is the configuration block for the Baseline Profile plugin.

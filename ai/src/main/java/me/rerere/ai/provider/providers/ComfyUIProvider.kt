@@ -68,7 +68,7 @@ class ComfyUIProvider(
     override suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams
-    ): ImageGenerationResult = withContext(me.rerere.ai.util.providerIoDispatcher) {
+    ): ImageGenerationResult = withContext(Dispatchers.IO) {
         require(providerSetting is ProviderSetting.ComfyUI) {
             "Expected ComfyUI provider setting"
         }

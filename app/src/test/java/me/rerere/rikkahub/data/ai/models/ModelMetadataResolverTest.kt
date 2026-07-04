@@ -6,7 +6,6 @@ import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
-import me.rerere.ai.provider.OpenAICompatibilityMode
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.data.datastore.Settings
 import org.junit.Assert.assertEquals
@@ -160,7 +159,7 @@ class ModelMetadataResolverTest {
     }
 
     @Test
-    fun preservesExistingUserSettingsWhenRequested() {
+    fun preservesApiDisplayNameWhenRequested() {
         val resolver = resolverFor(
             """
             {
@@ -169,11 +168,8 @@ class ModelMetadataResolverTest {
                 "id": "gpt-5-mini",
                 "canonical_model_id": "gpt-5-mini",
                 "display_name": "GPT-5 mini catalog",
-                "type": "IMAGE",
-                "input_modalities": ["TEXT", "IMAGE"],
-                "output_modalities": ["IMAGE"],
-                "abilities": ["TOOL", "REASONING"],
-                "image_generation_method": "diffusion"
+                "type": "CHAT",
+                "abilities": ["TOOL", "REASONING"]
               }]
             }
             """.trimIndent()
@@ -189,86 +185,11 @@ class ModelMetadataResolverTest {
                 preserveDisplayName = true,
                 preserveExistingCapabilities = true,
                 preserveExistingType = true,
-                preserveExistingConfiguration = true,
             ),
         )
 
         assertEquals("GPT-5 mini from API", resolved.displayName)
-        assertEquals(ModelType.CHAT, resolved.type)
-        assertEquals(listOf(Modality.TEXT), resolved.inputModalities)
-        assertEquals(listOf(Modality.TEXT), resolved.outputModalities)
-        assertEquals(emptyList<ModelAbility>(), resolved.abilities)
-        assertNull(resolved.imageGenerationMethod)
-    }
-
-    @Test
-    fun catalogMergeDoesNotResetSavedModelOrProviderOptions() {
-        val providerId = "d5734028-d39b-4d41-9841-fd648d65440e"
-        val snapshot = snapshotFor(
-            """
-            {
-              "schema_version": 1,
-              "providers": [{
-                "id": "$providerId",
-                "name": "OpenRouter",
-                "type": "openai",
-                "base_url": "https://openrouter.ai/api/v1",
-                "stream_options_mode": "enabled",
-                "image_response_modalities_mode": "enabled",
-                "reasoning_content_replay_mode": "enabled",
-                "prompt_cache_mode": "enabled"
-              }],
-              "models": [{
-                "id": "openai/gpt-5-mini",
-                "canonical_model_id": "gpt-5-mini",
-                "provider_ids": ["$providerId"],
-                "type": "IMAGE",
-                "input_modalities": ["TEXT", "IMAGE"],
-                "output_modalities": ["IMAGE"],
-                "abilities": ["TOOL", "REASONING"],
-                "image_generation_method": "diffusion"
-              }]
-            }
-            """.trimIndent()
-        )
-        val savedModel = Model(
-            modelId = "openai/gpt-5-mini",
-            type = ModelType.CHAT,
-            inputModalities = listOf(Modality.TEXT),
-            outputModalities = listOf(Modality.TEXT),
-            abilities = emptyList(),
-            imageGenerationMethod = null,
-            reasoningBehavior = null,
-        )
-        val savedProvider = ProviderSetting.OpenAI(
-            id = kotlin.uuid.Uuid.parse(providerId),
-            name = "OpenRouter",
-            baseUrl = "https://openrouter.ai/api/v1",
-            models = listOf(savedModel),
-            streamOptionsMode = OpenAICompatibilityMode.AUTO,
-            imageResponseModalitiesMode = OpenAICompatibilityMode.AUTO,
-            reasoningContentReplayMode = OpenAICompatibilityMode.AUTO,
-            promptCacheMode = OpenAICompatibilityMode.AUTO,
-        )
-
-        val merged = mergeCatalogIntoSettings(
-            settings = Settings(providers = listOf(savedProvider)),
-            snapshot = snapshot,
-            resolver = ModelMetadataResolver { snapshot },
-        )
-
-        val provider = merged.providers.single() as ProviderSetting.OpenAI
-        val model = provider.models.single()
-        assertEquals(ModelType.CHAT, model.type)
-        assertEquals(listOf(Modality.TEXT), model.inputModalities)
-        assertEquals(listOf(Modality.TEXT), model.outputModalities)
-        assertEquals(emptyList<ModelAbility>(), model.abilities)
-        assertNull(model.imageGenerationMethod)
-        assertNull(model.reasoningBehavior)
-        assertEquals(OpenAICompatibilityMode.AUTO, provider.streamOptionsMode)
-        assertEquals(OpenAICompatibilityMode.AUTO, provider.imageResponseModalitiesMode)
-        assertEquals(OpenAICompatibilityMode.AUTO, provider.reasoningContentReplayMode)
-        assertEquals(OpenAICompatibilityMode.AUTO, provider.promptCacheMode)
+        assertEquals(listOf(ModelAbility.TOOL, ModelAbility.REASONING), resolved.abilities)
     }
 
     @Test
@@ -628,7 +549,7 @@ class ModelMetadataResolverTest {
 
         assertNull(resolved.customIconUri)
         assertEquals(
-            "icons/gemini-new.svg".toCatalogIconUrl(),
+            "https://raw.githubusercontent.com/Cocolalilal/LastChat/main/catalog/icons/gemini-new.svg",
             resolved.iconUrl,
         )
     }
@@ -761,7 +682,7 @@ class ModelMetadataResolverTest {
         assertEquals("secret", openRouter.apiKey)
         assertEquals("My OpenRouter", openRouter.name)
         assertEquals(
-            "icons/openrouter-new.svg".toCatalogIconUrl(),
+            "https://raw.githubusercontent.com/Cocolalilal/LastChat/main/catalog/icons/openrouter-new.svg",
             openRouter.customIconUri,
         )
         assertEquals(
@@ -803,7 +724,7 @@ class ModelMetadataResolverTest {
         )
 
         assertEquals(
-            "icons/openrouter-new.svg".toCatalogIconUrl(),
+            "https://raw.githubusercontent.com/Cocolalilal/LastChat/main/catalog/icons/openrouter-new.svg",
             merged.providers.single().customIconUri,
         )
     }
@@ -852,38 +773,9 @@ class ModelMetadataResolverTest {
 
         assertEquals(1, merged.providers.size)
         assertEquals(
-            "icons/openrouter-new.svg".toCatalogIconUrl(),
+            "https://raw.githubusercontent.com/Cocolalilal/LastChat/main/catalog/icons/openrouter-new.svg",
             merged.providers.single().customIconUri,
         )
-    }
-
-    @Test
-    fun resolvesReasoningConfigFromCatalog() {
-        val resolver = resolverFor(
-            """
-            {
-              "schema_version": 2,
-              "model_families": [{
-                "id": "gpt",
-                "match_patterns": ["gpt-5"],
-                "icon": "icons/openai.svg",
-                "reasoning_config": {
-                  "type": "effort",
-                  "supported_levels": ["off", "auto", "low", "medium", "high", "max"]
-                }
-              }],
-              "models": []
-            }
-            """.trimIndent()
-        )
-
-        val resolved = resolver.applyToModel(
-            Model(modelId = "gpt-5.6-sol")
-        )
-
-        assertNotNull(resolved.reasoningConfig)
-        assertEquals(me.rerere.ai.provider.ReasoningModeType.EFFORT, resolved.reasoningConfig?.type)
-        assertEquals(listOf("off", "auto", "low", "medium", "high", "max"), resolved.reasoningConfig?.supportedLevels)
     }
 
     private fun resolverFor(rawJson: String): ModelMetadataResolver {

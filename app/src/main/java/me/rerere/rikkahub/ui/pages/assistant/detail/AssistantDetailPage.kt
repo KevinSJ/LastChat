@@ -451,8 +451,7 @@ fun AssistantDetailPage(
                 val embeddingProgress by vm.embeddingProgress.collectAsStateWithLifecycle()
                 val estimatedMemoryCapacity by vm.estimatedMemoryCapacity.collectAsStateWithLifecycle()
                 val needsEmbeddingRegeneration by vm.needsEmbeddingRegeneration.collectAsStateWithLifecycle()
-                val embeddingStatus by vm.embeddingStatus.collectAsStateWithLifecycle()
-                val retrievalDebugState by vm.retrievalDebugState.collectAsStateWithLifecycle()
+                val retrievalResults by vm.retrievalResults.collectAsStateWithLifecycle()
                 AssistantMemorySettings(
                     assistant = assistant,
                     hasSummarizerModelConfigured = settings.summarizerModelId != null,
@@ -464,11 +463,10 @@ fun AssistantDetailPage(
                     onRegenerateEmbeddings = { vm.regenerateEmbeddings() },
                     embeddingProgress = embeddingProgress,
                     onTestRetrieval = { vm.testRetrieval(it) },
-                    retrievalDebugState = retrievalDebugState,
+                    retrievalResults = retrievalResults,
                     assistantDetailVM = vm,
                     estimatedMemoryCapacity = estimatedMemoryCapacity,
                     needsEmbeddingRegeneration = needsEmbeddingRegeneration,
-                    embeddingStatus = embeddingStatus,
                     initialMemoryTab = initialMemoryTab,
                     scrollToMemoryId = scrollToMemoryId,
                     onNavigateToSummarizerSettings = { rootNavController.navigate(Screen.SettingModels) }

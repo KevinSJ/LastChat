@@ -45,7 +45,7 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.LinkUpOptions
-    ): Result<SearchResult> = withContext(searchIoDispatcher) {
+    ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
             val body = buildJsonObject {
@@ -96,7 +96,7 @@ object LinkUpService : SearchService<SearchServiceOptions.LinkUpOptions> {
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.LinkUpOptions
-    ): Result<ScrapedResult> = withContext(searchIoDispatcher) {
+    ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
         runCatching {
             val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
             val body = buildJsonObject {

@@ -5,7 +5,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
-import java.nio.file.Files
 
 class BackupArchiveFormatTest {
     @Test
@@ -61,7 +60,7 @@ class BackupArchiveFormatTest {
 
     @Test
     fun enumerateDirectoryEntriesIncludesNestedFilesAndEmptyDirectories() {
-        val tempDir = Files.createTempDirectory("backup-entries-").toFile()
+        val tempDir = createTempDir(prefix = "backup-entries-")
         try {
             val root = File(tempDir, "workspaces").apply { mkdirs() }
             File(root, "conversation-1").mkdirs()
@@ -82,7 +81,7 @@ class BackupArchiveFormatTest {
 
     @Test(expected = IllegalArgumentException::class)
     fun safeZipDestinationRejectsTraversal() {
-        val tempDir = Files.createTempDirectory("backup-path-").toFile()
+        val tempDir = createTempDir(prefix = "backup-path-")
         try {
             safeZipDestination(tempDir, "../outside.txt")
         } finally {

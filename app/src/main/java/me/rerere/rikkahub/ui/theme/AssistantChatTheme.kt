@@ -39,7 +39,6 @@ fun AssistantChatTheme(
         initialValue = null,
         assistant.useAssistantMaterialYouColors,
         assistant.materialYouColorIndex,
-        assistant.customMaterialYouColor,
         assistant.avatar,
         assistant.background
     ) {
@@ -47,16 +46,12 @@ fun AssistantChatTheme(
             value = null
             return@produceState
         }
-        value = if (assistant.materialYouColorIndex == CUSTOM_MATERIAL_YOU_COLOR_INDEX) {
-            parseMaterialYouColor(assistant.customMaterialYouColor)
-        } else {
-            withContext(Dispatchers.IO) {
-                extractSeedColor(
-                    context = context,
-                    assistant = assistant,
-                    colorIndex = assistant.materialYouColorIndex
-                )
-            }
+        value = withContext(Dispatchers.IO) {
+            extractSeedColor(
+                context = context,
+                assistant = assistant,
+                colorIndex = assistant.materialYouColorIndex
+            )
         }
     }
 
@@ -86,16 +81,6 @@ fun AssistantChatTheme(
         shapes = MaterialTheme.shapes,
         content = content
     )
-}
-
-const val CUSTOM_MATERIAL_YOU_COLOR_INDEX = -1
-
-fun parseMaterialYouColor(value: String?): Color? {
-    val normalized = value?.trim()?.let { if (it.startsWith("#")) it else "#$it" } ?: return null
-    if (!normalized.matches(Regex("#[0-9a-fA-F]{6}"))) return null
-    return normalized.removePrefix("#").toLongOrNull(16)?.let { rgb ->
-        Color(0xFF000000L or rgb)
-    }
 }
 
 private suspend fun extractSeedColor(

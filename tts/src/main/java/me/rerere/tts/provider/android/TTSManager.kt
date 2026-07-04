@@ -9,7 +9,6 @@ import me.rerere.tts.model.AudioChunk
 import me.rerere.tts.model.TTSModelInfo
 import me.rerere.tts.model.TTSRequest
 import me.rerere.tts.provider.TTSProviderSetting
-import me.rerere.tts.provider.TtsSpeechGenerator
 import me.rerere.tts.provider.providers.CartesiaTTSProvider
 import me.rerere.tts.provider.providers.ElevenLabsTTSProvider
 import me.rerere.tts.provider.providers.FishAudioTTSProvider
@@ -22,7 +21,7 @@ import me.rerere.tts.provider.providers.android.SystemTTSProvider
 import okhttp3.OkHttpClient
 import kotlin.time.Duration.Companion.seconds
 
-class TTSManager(private val context: Context) : TtsSpeechGenerator {
+class TTSManager(private val context: Context) {
     private val openAIProvider = OpenAITTSProvider(
         httpClient = OkHttpPlatformHttpClient(
             OkHttpClient.Builder()
@@ -81,7 +80,7 @@ class TTSManager(private val context: Context) : TtsSpeechGenerator {
         )
     )
 
-    override fun generateSpeech(
+    fun generateSpeech(
         providerSetting: TTSProviderSetting,
         request: TTSRequest
     ): Flow<AudioChunk> {

@@ -8,19 +8,18 @@ import me.rerere.tts.model.AudioFormat
 import me.rerere.tts.model.TTSRequest
 import me.rerere.tts.model.TTSResponse
 import me.rerere.tts.provider.TTSProviderSetting
-import me.rerere.tts.provider.TtsSpeechGenerator
-import me.rerere.tts.provider.ttsIoDispatcher
+import me.rerere.tts.provider.android.TTSManager
 
 /**
  * Bridge TTS provider flow to a single audio buffer.
  */
 class TtsSynthesizer(
-    private val ttsManager: TtsSpeechGenerator
+    private val ttsManager: TTSManager
 ) {
     suspend fun synthesize(
         setting: TTSProviderSetting,
         chunk: TtsChunk
-    ): TTSResponse = withContext(ttsIoDispatcher) {
+    ): TTSResponse = withContext(Dispatchers.IO) {
         collectToResponse(
             ttsManager.generateSpeech(setting, TTSRequest(text = chunk.text))
         )

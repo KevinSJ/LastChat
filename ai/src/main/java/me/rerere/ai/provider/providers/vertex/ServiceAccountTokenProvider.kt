@@ -61,7 +61,7 @@ class ServiceAccountTokenProvider(
         serviceAccountEmail: String,
         privateKeyPem: String,
         scopes: List<String> = listOf("https://www.googleapis.com/auth/cloud-platform")
-    ): String = withContext(me.rerere.ai.util.providerIoDispatcher) {
+    ): String = withContext(Dispatchers.IO) {
         val cacheKey = generateCacheKey(serviceAccountEmail, scopes)
 
         // Check cache first
@@ -82,11 +82,11 @@ class ServiceAccountTokenProvider(
           "exp":$exp
         }""".trimIndent()
 
-        val headerB64 = base64UrlNoPad(headerJson.encodeToByteArray())
-        val claimB64 = base64UrlNoPad(claimJson.encodeToByteArray())
+        val headerB64 = base64UrlNoPad(headerJson.toByteArray(Charsets.UTF_8))
+        val claimB64 = base64UrlNoPad(claimJson.toByteArray(Charsets.UTF_8))
         val signingInput = "$headerB64.$claimB64"
 
-        val signature = jwtSigner.signRs256(signingInput.encodeToByteArray(), privateKeyPem)
+        val signature = jwtSigner.signRs256(signingInput.toByteArray(Charsets.UTF_8), privateKeyPem)
         val assertion = "$signingInput.${base64UrlNoPad(signature)}"
 
         val form = formUrlEncode(

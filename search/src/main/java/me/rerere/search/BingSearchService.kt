@@ -29,7 +29,7 @@ object BingSearchService : SearchService<SearchServiceOptions.BingLocalOptions> 
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.BingLocalOptions
-    ): Result<SearchResult> = withContext(searchIoDispatcher) {
+    ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
             val url = "https://www.bing.com/search?q=" + query.urlEncode()

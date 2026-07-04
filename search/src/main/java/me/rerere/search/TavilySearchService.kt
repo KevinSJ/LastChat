@@ -58,7 +58,7 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.TavilyOptions
-    ): Result<SearchResult> = withContext(searchIoDispatcher) {
+    ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
             val topic = params["topic"]?.jsonPrimitive?.contentOrNull ?: "general"
@@ -106,7 +106,7 @@ object TavilySearchService : SearchService<SearchServiceOptions.TavilyOptions> {
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.TavilyOptions
-    ): Result<ScrapedResult> = withContext(searchIoDispatcher) {
+    ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
         runCatching {
             val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
             val body = buildJsonObject {

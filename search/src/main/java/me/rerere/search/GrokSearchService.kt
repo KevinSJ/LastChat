@@ -40,7 +40,7 @@ object GrokSearchService : SearchService<SearchServiceOptions.GrokOptions> {
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.GrokOptions
-    ): Result<SearchResult> = withContext(searchIoDispatcher) {
+    ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
             if (serviceOptions.apiKey.isBlank()) {
                 error("Grok API key is required")

@@ -574,8 +574,10 @@ private fun VoiceItem(
     val shape = rememberAnimatedGroupedVoiceItemShape(selected = selected, position = position)
     val containerColor = if (selected) {
         MaterialTheme.colorScheme.primaryContainer
+    } else if (LocalDarkMode.current) {
+        Color.Black
     } else {
-        MaterialTheme.colorScheme.surfaceContainerHighest
+        MaterialTheme.colorScheme.surfaceContainerHigh
     }
     val contentColor = if (selected) {
         MaterialTheme.colorScheme.onPrimaryContainer

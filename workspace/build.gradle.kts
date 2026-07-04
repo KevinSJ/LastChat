@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "me.rerere.workspace"
-    compileSdk = 36
+    compileSdk {
+        version = release(37)
+    }
 
     defaultConfig {
         minSdk = 26
