@@ -323,6 +323,10 @@ class LocalTools(
                             put("type", "string")
                             put("description", "End time in ISO 8601 format (e.g., '2023-10-27T11:00:00Z')")
                         })
+                        put("timezone", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Timezone ID (e.g., 'America/New_York'). Defaults to device timezone if not specified.")
+                        })
                     },
                     required = listOf("title", "start_time", "end_time")
                 )
@@ -335,9 +339,21 @@ class LocalTools(
                 val location = params["location"]?.jsonPrimitive?.contentOrNull.orEmpty()
                 val startTimeStr = params["start_time"]?.jsonPrimitive?.contentOrNull.orEmpty()
                 val endTimeStr = params["end_time"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val timezoneId = params["timezone"]?.jsonPrimitive?.contentOrNull
+                val zoneId = runCatching { java.time.ZoneId.of(timezoneId) }.getOrElse { java.time.ZoneId.systemDefault() }
 
-                val startTime = runCatching { java.time.Instant.parse(startTimeStr).toEpochMilli() }.getOrDefault(System.currentTimeMillis())
-                val endTime = runCatching { java.time.Instant.parse(endTimeStr).toEpochMilli() }.getOrDefault(startTime + 3600000)
+                fun parseDateTime(s: String): Long? = runCatching {
+                    java.time.ZonedDateTime.parse(s).toInstant().toEpochMilli()
+                }.recoverCatching {
+                    java.time.OffsetDateTime.parse(s).toInstant().toEpochMilli()
+                }.recoverCatching {
+                    java.time.Instant.parse(s).toEpochMilli()
+                }.recoverCatching {
+                    java.time.LocalDateTime.parse(s).atZone(zoneId).toInstant().toEpochMilli()
+                }.getOrNull()
+
+                val startTime = parseDateTime(startTimeStr) ?: System.currentTimeMillis()
+                val endTime = parseDateTime(endTimeStr) ?: (startTime + 3600000)
 
                 buildJsonObject {
                     put("status", notificationPlatform.addCalendarEvent(title, description, location, startTime, endTime))

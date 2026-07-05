@@ -11,8 +11,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
-    //alias(libs.plugins.google.services)
-    //alias(libs.plugins.firebase.crashlytics)
+    alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 val enableReleaseShrinker = providers.gradleProperty("lastchat.release.minify")
@@ -219,7 +219,7 @@ tasks.register("buildAll") {
 }
 
 tasks.named("preBuild") {
-    //dependsOn(buildWebUi)
+    dependsOn(buildWebUi)
 }
 
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
