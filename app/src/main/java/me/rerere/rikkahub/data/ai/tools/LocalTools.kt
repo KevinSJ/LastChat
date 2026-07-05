@@ -65,6 +65,14 @@ sealed class LocalToolOption {
     @Serializable
     @SerialName("image_generation")
     data object ImageGeneration : LocalToolOption()
+
+    @Serializable
+    @SerialName("calendar")
+    data object Calendar : LocalToolOption()
+
+    @Serializable
+    @SerialName("email")
+    data object Email : LocalToolOption()
 }
 
 object LocalToolOptionListSerializer :
@@ -283,6 +291,98 @@ class LocalTools(
                             put("provider", provider.name.ifBlank { "TTS" })
                         }
                     }
+                }
+            }
+        )
+    }
+
+    val calendarTool by lazy {
+        Tool(
+            name = "add_calendar_event",
+            description = "Open the system calendar app to add a new event with pre-filled details. Use this when the user wants to schedule an event, meeting, or reminder on their calendar.",
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("title", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Event title")
+                        })
+                        put("description", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Event description")
+                        })
+                        put("location", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Event location")
+                        })
+                        put("start_time", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Start time in ISO 8601 format (e.g., '2023-10-27T10:00:00Z')")
+                        })
+                        put("end_time", buildJsonObject {
+                            put("type", "string")
+                            put("description", "End time in ISO 8601 format (e.g., '2023-10-27T11:00:00Z')")
+                        })
+                    },
+                    required = listOf("title", "start_time", "end_time")
+                )
+            },
+            approvalMode = ToolApprovalMode.RequiresApproval,
+            execute = { args ->
+                val params = args.jsonObject
+                val title = params["title"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val description = params["description"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val location = params["location"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val startTimeStr = params["start_time"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val endTimeStr = params["end_time"]?.jsonPrimitive?.contentOrNull.orEmpty()
+
+                val startTime = runCatching { java.time.Instant.parse(startTimeStr).toEpochMilli() }.getOrDefault(System.currentTimeMillis())
+                val endTime = runCatching { java.time.Instant.parse(endTimeStr).toEpochMilli() }.getOrDefault(startTime + 3600000)
+
+                buildJsonObject {
+                    put("status", notificationPlatform.addCalendarEvent(title, description, location, startTime, endTime))
+                }
+            }
+        )
+    }
+
+    val emailTool by lazy {
+        Tool(
+            name = "draft_email",
+            description = "Open the default email app with a pre-filled draft. Use this when the user wants to send or draft an email.",
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("recipient", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Recipient email address")
+                        })
+                        put("subject", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Email subject")
+                        })
+                        put("body", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Email body content")
+                        })
+                        put("cc", buildJsonObject {
+                            put("type", "string")
+                            put("description", "CC email address")
+                        })
+                    },
+                    required = listOf("recipient", "subject", "body")
+                )
+            },
+            approvalMode = ToolApprovalMode.RequiresApproval,
+            execute = { args ->
+                val params = args.jsonObject
+                val recipient = params["recipient"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val subject = params["subject"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val body = params["body"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val cc = params["cc"]?.jsonPrimitive?.contentOrNull.orEmpty()
+
+                buildJsonObject {
+                    put("status", notificationPlatform.draftEmail(recipient, subject, body, cc))
                 }
             }
         )
@@ -555,6 +655,12 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.ImageGeneration)) {
             tools.add(imageGenerationTool)
+        }
+        if (options.contains(LocalToolOption.Calendar)) {
+            tools.add(calendarTool)
+        }
+        if (options.contains(LocalToolOption.Email)) {
+            tools.add(emailTool)
         }
         return tools
     }

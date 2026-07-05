@@ -71,6 +71,10 @@
     <string name="assistant_page_local_tools_character_questions_desc">Let the character ask clarifying questions.</string>
     <string name="assistant_page_local_tools_image_generation_title" translatable="false">Image Generation</string>
     <string name="assistant_page_local_tools_image_generation_desc" translatable="false">Allow this character to generate images with the selected image model and save them to the gallery.</string>
+    <string name="calendar_tools_title">Calendar</string>
+    <string name="calendar_tools_desc">Open the system calendar to add events.</string>
+    <string name="email_tools_title">Email</string>
+    <string name="email_tools_desc">Open the default email app to draft emails.</string>
     <string name="assistant_page_local_tools_python_internet_title">Allow Internet Access</string>
     <string name="assistant_page_local_tools_python_internet_desc">Allow Python code to make network requests</string>
     <string name="assistant_page_manage_memory">Manage Memory (%d)</string>

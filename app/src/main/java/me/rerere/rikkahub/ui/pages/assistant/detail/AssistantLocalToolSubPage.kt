@@ -158,6 +158,34 @@ fun AssistantLocalToolSubPage(
                 onUpdate(assistant.copy(localTools = newLocalTools))
             }
         )
+
+        LocalToolCard(
+            title = stringResource(R.string.calendar_tools_title),
+            description = stringResource(R.string.calendar_tools_desc),
+            isEnabled = assistant.localTools.contains(LocalToolOption.Calendar),
+            onToggle = { enabled ->
+                val newLocalTools = if (enabled) {
+                    assistant.localTools + LocalToolOption.Calendar
+                } else {
+                    assistant.localTools - LocalToolOption.Calendar
+                }
+                onUpdate(assistant.copy(localTools = newLocalTools))
+            }
+        )
+
+        LocalToolCard(
+            title = stringResource(R.string.email_tools_title),
+            description = stringResource(R.string.email_tools_desc),
+            isEnabled = assistant.localTools.contains(LocalToolOption.Email),
+            onToggle = { enabled ->
+                val newLocalTools = if (enabled) {
+                    assistant.localTools + LocalToolOption.Email
+                } else {
+                    assistant.localTools - LocalToolOption.Email
+                }
+                onUpdate(assistant.copy(localTools = newLocalTools))
+            }
+        )
     }
 
     if (showNotificationAccessDialog && pendingNotificationAccess.specialAccesses.isNotEmpty()) {

@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.CalendarContract
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +74,21 @@ interface LocalToolNotificationPlatform {
     ): ScheduledLocalToolMessage
 
     fun getRecentNotifications(limit: Int): List<LocalToolNotificationSnapshot>
+
+    fun addCalendarEvent(
+        title: String,
+        description: String,
+        location: String,
+        startTime: Long,
+        endTime: Long,
+    ): String
+
+    fun draftEmail(
+        recipient: String,
+        subject: String,
+        body: String,
+        cc: String,
+    ): String
 }
 
 internal object AndroidLocalToolPlatform {
@@ -197,6 +214,54 @@ class AndroidLocalToolNotificationPlatform(
                 content = notification.content,
                 postTime = notification.postTime,
             )
+        }
+    }
+
+    override fun addCalendarEvent(
+        title: String,
+        description: String,
+        location: String,
+        startTime: Long,
+        endTime: Long
+    ): String {
+        return try {
+            val intent = Intent(Intent.ACTION_INSERT).apply {
+                data = CalendarContract.Events.CONTENT_URI
+                putExtra(CalendarContract.Events.TITLE, title)
+                putExtra(CalendarContract.Events.DESCRIPTION, description)
+                putExtra(CalendarContract.Events.EVENT_LOCATION, location)
+                putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, startTime)
+                putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endTime)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            "success"
+        } catch (e: Exception) {
+            "error: ${e.message}"
+        }
+    }
+
+    override fun draftEmail(
+        recipient: String,
+        subject: String,
+        body: String,
+        cc: String
+    ): String {
+        return try {
+            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                data = Uri.parse("mailto:")
+                putExtra(Intent.EXTRA_EMAIL, arrayOf(recipient))
+                if (cc.isNotBlank()) {
+                    putExtra(Intent.EXTRA_CC, arrayOf(cc))
+                }
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                putExtra(Intent.EXTRA_TEXT, body)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            "success"
+        } catch (e: Exception) {
+            "error: ${e.message}"
         }
     }
 }

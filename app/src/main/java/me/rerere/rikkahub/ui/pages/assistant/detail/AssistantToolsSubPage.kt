@@ -322,6 +322,42 @@ fun AssistantToolsSubPage(
                     )
                 }
             )
+
+            SettingGroupItem(
+                title = stringResource(R.string.calendar_tools_title),
+                subtitle = stringResource(R.string.calendar_tools_desc),
+                trailing = {
+                    HapticSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Calendar),
+                        onCheckedChange = { enabled ->
+                            val newLocalTools = if (enabled) {
+                                assistant.localTools + LocalToolOption.Calendar
+                            } else {
+                                assistant.localTools - LocalToolOption.Calendar
+                            }
+                            onUpdate(assistant.copy(localTools = newLocalTools))
+                        }
+                    )
+                }
+            )
+
+            SettingGroupItem(
+                title = stringResource(R.string.email_tools_title),
+                subtitle = stringResource(R.string.email_tools_desc),
+                trailing = {
+                    HapticSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Email),
+                        onCheckedChange = { enabled ->
+                            val newLocalTools = if (enabled) {
+                                assistant.localTools + LocalToolOption.Email
+                            } else {
+                                assistant.localTools - LocalToolOption.Email
+                            }
+                            onUpdate(assistant.copy(localTools = newLocalTools))
+                        }
+                    )
+                }
+            )
         }
 
         // MCP GROUP (only show if servers configured)
