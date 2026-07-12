@@ -58,4 +58,4 @@ jobs:
         if: success()
         with:
           name: artifacts
-          path: app/build/outputs/apk/**/*.apk
+          path: app/build/outputs/apk/debug/*.apk
