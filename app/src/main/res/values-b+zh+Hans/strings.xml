@@ -65,6 +65,10 @@
   <string name="assistant_page_local_tools_tts_desc">让助手使用您选择的 TTS 提供商大声朗读文本</string>
   <string name="assistant_page_local_tools_character_questions_title">性格问题</string>
   <string name="assistant_page_local_tools_character_questions_desc">让角色提出澄清问题。</string>
+  <string name="assistant_page_local_tools_intent_access_title">Intent与系统访问</string>
+  <string name="assistant_page_local_tools_intent_access_desc">允许助手打开 Android 系统设置并发送系统 Intent 动作</string>
+  <string name="assistant_page_local_tools_calendar_access_title">日历访问</string>
+  <string name="assistant_page_local_tools_calendar_access_desc">允许助手列出和创建系统日历中的事件</string>
   <string name="assistant_page_local_tools_python_internet_title">允许互联网访问</string>
   <string name="assistant_page_local_tools_python_internet_desc">允许 Python 代码发出网络请求</string>
   <string name="assistant_page_manage_memory">管理记忆 (%d条)</string>
