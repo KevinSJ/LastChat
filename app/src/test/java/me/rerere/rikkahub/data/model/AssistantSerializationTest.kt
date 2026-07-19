@@ -138,4 +138,34 @@ class AssistantSerializationTest {
         assertTrue(decoded.localTools.contains(LocalToolOption.AskUser))
     }
 
+    @Test
+    fun intentAccessLocalToolRoundTripsThroughSerialization() {
+        val assistant = Assistant(
+            id = Uuid.parse("00000000-0000-0000-0000-000000000015"),
+            name = "Intent Bot",
+            localTools = listOf(LocalToolOption.IntentAccess)
+        )
+
+        val encoded = JsonInstant.encodeToString(Assistant.serializer(), assistant)
+        val decoded = JsonInstant.decodeFromString(Assistant.serializer(), encoded)
+
+        assertTrue(encoded.contains("\"intent_access\""))
+        assertTrue(decoded.localTools.contains(LocalToolOption.IntentAccess))
+    }
+
+    @Test
+    fun calendarAccessLocalToolRoundTripsThroughSerialization() {
+        val assistant = Assistant(
+            id = Uuid.parse("00000000-0000-0000-0000-000000000016"),
+            name = "Calendar Bot",
+            localTools = listOf(LocalToolOption.CalendarAccess)
+        )
+
+        val encoded = JsonInstant.encodeToString(Assistant.serializer(), assistant)
+        val decoded = JsonInstant.decodeFromString(Assistant.serializer(), encoded)
+
+        assertTrue(encoded.contains("\"calendar_access\""))
+        assertTrue(decoded.localTools.contains(LocalToolOption.CalendarAccess))
+    }
+
 }
