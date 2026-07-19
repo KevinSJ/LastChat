@@ -1,6 +1,9 @@
 name: Release Build
 
 on:
+  push:
+    branches:
+      - '**'
   workflow_dispatch:
 
 jobs:
@@ -16,7 +19,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Gradle cache
         uses: actions/cache@v4
@@ -48,3 +51,13 @@ jobs:
         with:
           name: artifacts
           path: app/build/outputs/apk/debug/*.apk
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release for ${{ github.ref_name }}
+          files: app/build/outputs/apk/debug/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
