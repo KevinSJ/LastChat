@@ -158,6 +158,34 @@ fun AssistantLocalToolSubPage(
                 onUpdate(assistant.copy(localTools = newLocalTools))
             }
         )
+
+        LocalToolCard(
+            title = stringResource(R.string.assistant_page_local_tools_intent_access_title),
+            description = stringResource(R.string.assistant_page_local_tools_intent_access_desc),
+            isEnabled = assistant.localTools.contains(LocalToolOption.IntentAccess),
+            onToggle = { enabled ->
+                val newLocalTools = if (enabled) {
+                    assistant.localTools + LocalToolOption.IntentAccess
+                } else {
+                    assistant.localTools - LocalToolOption.IntentAccess
+                }
+                onUpdate(assistant.copy(localTools = newLocalTools))
+            }
+        )
+
+        LocalToolCard(
+            title = stringResource(R.string.assistant_page_local_tools_calendar_access_title),
+            description = stringResource(R.string.assistant_page_local_tools_calendar_access_desc),
+            isEnabled = assistant.localTools.contains(LocalToolOption.CalendarAccess),
+            onToggle = { enabled ->
+                val newLocalTools = if (enabled) {
+                    assistant.localTools + LocalToolOption.CalendarAccess
+                } else {
+                    assistant.localTools - LocalToolOption.CalendarAccess
+                }
+                onUpdate(assistant.copy(localTools = newLocalTools))
+            }
+        )
     }
 
     if (showNotificationAccessDialog && pendingNotificationAccess.specialAccesses.isNotEmpty()) {
