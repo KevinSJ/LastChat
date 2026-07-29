@@ -65,6 +65,14 @@ sealed class LocalToolOption {
     @Serializable
     @SerialName("image_generation")
     data object ImageGeneration : LocalToolOption()
+
+    @Serializable
+    @SerialName("intent_access")
+    data object IntentAccess : LocalToolOption()
+
+    @Serializable
+    @SerialName("calendar_access")
+    data object CalendarAccess : LocalToolOption()
 }
 
 object LocalToolOptionListSerializer :
@@ -529,6 +537,8 @@ class LocalTools(
         return result
     }
     
+    private val permissionBroker by lazy { AgentPermissionBroker(context) }
+
     /**
      * Get all enabled local tools for the conversation.
      */
@@ -555,6 +565,14 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.ImageGeneration)) {
             tools.add(imageGenerationTool)
+        }
+        if (options.contains(LocalToolOption.IntentAccess)) {
+            tools.add(createSettingsOpenTool(context, permissionBroker))
+            tools.add(createIntentOpenTool(context, permissionBroker))
+        }
+        if (options.contains(LocalToolOption.CalendarAccess)) {
+            tools.add(createCalendarListTool(context, permissionBroker))
+            tools.add(createCalendarCreateTool(context, permissionBroker))
         }
         return tools
     }

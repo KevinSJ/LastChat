@@ -65,6 +65,10 @@
   <string name="assistant_page_local_tools_tts_desc">اسمح للمساعد بقراءة النص بصوت عالٍ باستخدام موفر تحويل النص إلى كلام (TTS) الذي حددته</string>
   <string name="assistant_page_local_tools_character_questions_title">أسئلة الشخصيات</string>
   <string name="assistant_page_local_tools_character_questions_desc">دع الشخصية تطرح أسئلة توضيحية.</string>
+  <string name="assistant_page_local_tools_intent_access_title">الوصول إلى النوايا والنظام</string>
+  <string name="assistant_page_local_tools_intent_access_desc">السماح للمساعد بفتح إعدادات أندرويد وإرسال إجراءات النوايا المعتمدة في النظام</string>
+  <string name="assistant_page_local_tools_calendar_access_title">الوصول إلى التقويم</string>
+  <string name="assistant_page_local_tools_calendar_access_desc">السماح للمساعد بسرد وإنشاء الأحداث في تقويم النظام</string>
   <string name="assistant_page_local_tools_python_internet_title">السماح بالوصول إلى الإنترنت</string>
   <string name="assistant_page_local_tools_python_internet_desc">السماح لرمز بايثون بتقديم طلبات الشبكة</string>
   <string name="assistant_page_manage_memory">إدارة الذاكرة (%d)</string>
