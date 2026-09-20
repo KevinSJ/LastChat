@@ -53,6 +53,7 @@ import me.rerere.common.platform.PlatformHttpRequest
 import me.rerere.common.platform.PlatformServerEvent
 import me.rerere.common.platform.PlatformMediaEncoder
 import kotlin.time.Clock
+import kotlin.uuid.Uuid
 
 private const val TAG = "ChatCompletionsAPI"
 private const val LEADING_ASSISTANT_COMPATIBILITY_USER_PROMPT =
@@ -75,7 +76,7 @@ class ChatCompletionsAPI(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): MessageChunk = withContext(Dispatchers.IO) {
+    ): MessageChunk = withContext(me.rerere.ai.util.providerIoDispatcher) {
         val requestBody =
             buildChatCompletionRequest(
                 messages = messages,
@@ -92,7 +93,7 @@ class ChatCompletionsAPI(
                 method = "POST",
                 url = "${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}",
                 headers = params.customHeaders.toHeaderMap()
-                    .withReferHeaders(providerSetting.baseUrl)
+                    .withReferHeaders(providerSetting.baseUrl, params.sessionId)
                     .withAuthAndJson(keyRoulette.next(providerSetting.apiKey)),
                 body = encodedRequestBody.encodeToByteArray(),
                 mediaType = "application/json",
@@ -149,7 +150,7 @@ class ChatCompletionsAPI(
             method = "POST",
             url = "${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}",
             headers = params.customHeaders.toHeaderMap()
-                .withReferHeaders(providerSetting.baseUrl)
+                .withReferHeaders(providerSetting.baseUrl, params.sessionId)
                 .withAuthAndJson(keyRoulette.next(providerSetting.apiKey)),
             body = encodedRequestBody.encodeToByteArray(),
             mediaType = "application/json",
@@ -414,15 +415,18 @@ class ChatCompletionsAPI(
 
                     else -> {
                         // OpenAI 官方
-                        // 文档中，只支持 "low", "medium", "high"
+                        // 支持 "none", "low", "medium", "high", "max"
                         if (level != ReasoningLevel.AUTO && level != ReasoningLevel.OFF) {
-                            put("reasoning_effort", if(level.effort == "minimal") "low" else level.effort)
+                            put("reasoning_effort", level.effort)
                         } else if (level == ReasoningLevel.OFF) {
                             // Suppress reasoning mode on local fast-tier LLMs (e.g. LM Studio, vLLM, Ollama)
                             // This acts as a Jinja template override for models like Qwen 3.5
                             put("chat_template_kwargs", buildJsonObject {
                                 put("enable_thinking", false)
                             })
+                            if (params.model.modelId.contains(Regex("gpt-5|gpt-4o|o[134]"))) {
+                                put("reasoning_effort", "none")
+                            }
                         }
                     }
                 }
@@ -883,8 +887,12 @@ private fun Map<String, String>.withAuthAndJson(apiKey: String): Map<String, Str
     )
 }
 
-private fun Map<String, String>.withReferHeaders(baseUrl: String): Map<String, String> {
-    return when (baseUrl.urlHostOrNull()) {
+private fun Map<String, String>.withReferHeaders(
+    baseUrl: String,
+    sessionId: String? = null,
+): Map<String, String> {
+    val host = baseUrl.urlHostOrNull()?.lowercase()
+    var headers = when (host) {
         "aihubmix.com" -> this + ("APP-Code" to "DKHA9468")
         "openrouter.ai" -> this + mapOf(
             "X-Title" to "LastChat",
@@ -892,6 +900,13 @@ private fun Map<String, String>.withReferHeaders(baseUrl: String): Map<String, S
         )
         else -> this
     }
+    if (host == "opencode.ai" || host?.endsWith(".opencode.ai") == true) {
+        if (headers.keys.none { it.equals("x-opencode-session", ignoreCase = true) }) {
+            val session = sessionId?.trim()?.takeIf { it.isNotEmpty() } ?: Uuid.random().toString()
+            headers = headers + ("x-opencode-session" to session)
+        }
+    }
+    return headers
 }
 
 private fun ProviderProxy.toPlatformProxy(): PlatformHttpProxy? {

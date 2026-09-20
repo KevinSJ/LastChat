@@ -312,11 +312,6 @@ class WebdavSync(
                     }
                 }
 
-                restoreManagedFileDirectories(
-                    stagedFilesDir = stagedFilesDir,
-                    manifest = manifest,
-                    stagedManagedDirs = stagedManagedDirs,
-                )
                 restorePortableSharedPreferences(
                     stagedSnapshots = stagedPrefs,
                     manifest = manifest,
@@ -338,9 +333,23 @@ class WebdavSync(
                     settingsStore.update(cleanedSettings)
                     LogUtil.i(
                         TAG,
-                        "restoreFromBackupFile: Settings restored after file/db/prefs commit",
+                        "restoreFromBackupFile: Settings restored before file commit",
                     )
                 }
+
+                // Files last: never wipe live dirs until DB/settings have committed, and
+                // skip dirs that were listed in the manifest but missing from the zip.
+                val directoriesToRestore = resolveManagedDirsToRestore(
+                    manifest = manifest,
+                    stagedManagedDirs = stagedManagedDirs,
+                    stagedFilesDir = stagedFilesDir,
+                )
+                restoreManagedFileDirectories(
+                    liveFilesDir = context.filesDir,
+                    stagedFilesDir = stagedFilesDir,
+                    directoriesToRestore = directoriesToRestore,
+                    liveBackupDir = File(restoreTempDir, "live_files_bak"),
+                )
 
                 LogUtil.i(TAG, "restoreFromBackupFile: Restore completed successfully")
 
@@ -384,7 +393,13 @@ class WebdavSync(
     private fun addManagedFileEntries(zipOut: ZipOutputStream) {
         BackupArchiveFormat.MANAGED_FILE_DIRS.forEach { dirName ->
             val directory = File(context.filesDir, dirName)
-            enumerateDirectoryEntries(directory, dirName).forEach { entry ->
+            val skip: (String, Boolean) -> Boolean =
+                if (dirName == BackupArchiveFormat.WORKSPACES_DIR) {
+                    { relative, _ -> BackupArchiveFormat.isExcludedWorkspacePath(relative) }
+                } else {
+                    { _, _ -> false }
+                }
+            enumerateDirectoryEntries(directory, dirName, skip).forEach { entry ->
                 try {
                     if (entry.isDirectory) {
                         addDirectoryToZip(zipOut, entry.entryName)
@@ -431,38 +446,6 @@ class WebdavSync(
         targetFile.parentFile?.mkdirs()
         targetFile.sink().buffer().outputStream().use { outputStream ->
             zipIn.copyTo(outputStream)
-        }
-    }
-
-    private fun restoreManagedFileDirectories(
-        stagedFilesDir: File,
-        manifest: BackupManifest?,
-        stagedManagedDirs: Set<String>,
-    ) {
-        val directoriesToRestore = if (manifest?.formatVersion == BackupArchiveFormat.CURRENT_FORMAT_VERSION &&
-            manifest.includesFiles
-        ) {
-            manifest.managedFileDirs
-                .filter { BackupArchiveFormat.MANAGED_FILE_DIRS.contains(it) }
-                .distinct()
-        } else {
-            stagedManagedDirs
-                .filter { BackupArchiveFormat.MANAGED_FILE_DIRS.contains(it) }
-                .distinct()
-                .sorted()
-        }
-
-        directoriesToRestore.forEach { dirName ->
-            val liveDir = File(context.filesDir, dirName)
-            if (liveDir.exists()) {
-                liveDir.deleteRecursively()
-            }
-            liveDir.mkdirs()
-
-            val stagedDir = File(stagedFilesDir, dirName)
-            if (stagedDir.exists()) {
-                mirrorDirectory(stagedDir, liveDir)
-            }
         }
     }
 
@@ -523,19 +506,6 @@ class WebdavSync(
 
     private fun restoreDatabase(stagedDbFile: File): DatabaseSanitizer.SanitizationResult {
         return restoreLiveDatabase(stagedDbFile)
-    }
-
-    private fun mirrorDirectory(sourceDir: File, targetDir: File) {
-        sourceDir.walkTopDown().forEach { source ->
-            val relative = source.relativeTo(sourceDir)
-            val target = File(targetDir, relative.path)
-            if (source.isDirectory) {
-                target.mkdirs()
-            } else {
-                target.parentFile?.mkdirs()
-                source.copyTo(target, overwrite = true)
-            }
-        }
     }
 }
 

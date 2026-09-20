@@ -28,6 +28,7 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.CustomHeader
+import me.rerere.ai.provider.ContextLimitSource
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
@@ -124,6 +125,7 @@ class GoogleProvider(
     private val mediaEncoder: PlatformMediaEncoder,
     platformJwtSigner: PlatformJwtSigner,
 ) : Provider<ProviderSetting.Google> {
+    override val supportsEmbeddings: Boolean = true
     private val keyRoulette = KeyRoulette.default()
     private val serviceAccountTokenProvider by lazy {
         ServiceAccountTokenProvider(platformHttpClient, platformJwtSigner)
@@ -161,7 +163,7 @@ class GoogleProvider(
     }
 
     override suspend fun listModels(providerSetting: ProviderSetting.Google): List<Model> =
-        withContext(Dispatchers.IO) {
+        withContext(me.rerere.ai.util.providerIoDispatcher) {
             val url = buildUrl(providerSetting = providerSetting, path = "models?pageSize=100")
             val response = platformHttpClient.execute(
                 PlatformHttpRequest(
@@ -193,12 +195,17 @@ class GoogleProvider(
                     val displayName = modelObject["displayName"]?.jsonPrimitive?.contentOrNull
                         ?.ifBlank { null }
                         ?: modelId
+                    val contextLimits = parseGoogleProviderContextLimits(modelObject)
 
                     Model(
                         modelId = modelId,
                         displayName = displayName,
                         canonicalModelId = ModelIdNormalizer.canonicalize(modelId),
                         type = if ("generateContent" in supportedGenerationMethods) ModelType.CHAT else ModelType.EMBEDDING,
+                        contextWindowTokens = contextLimits.contextWindowTokens,
+                        maxInputTokens = contextLimits.maxInputTokens,
+                        maxOutputTokens = contextLimits.maxOutputTokens,
+                        contextLimitSource = contextLimits.source,
                     )
                 }
             } else {
@@ -210,7 +217,7 @@ class GoogleProvider(
         providerSetting: ProviderSetting.Google,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): MessageChunk = withContext(Dispatchers.IO) {
+    ): MessageChunk = withContext(me.rerere.ai.util.providerIoDispatcher) {
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
@@ -263,6 +270,44 @@ class GoogleProvider(
         )
 
         messageChunk
+    }
+
+    override suspend fun countInputTokens(
+        providerSetting: ProviderSetting.Google,
+        messages: List<UIMessage>,
+        params: TextGenerationParams,
+    ): Int? = withContext(me.rerere.ai.util.providerIoDispatcher) {
+        val generationBody = buildCompletionRequestBody(messages, params)
+        val requestBody = buildJsonObject {
+            put("generateContentRequest", generationBody)
+        }
+        val url = buildUrl(
+            providerSetting = providerSetting,
+            path = if (providerSetting.vertexAI) {
+                "publishers/google/models/${params.model.modelId}:countTokens"
+            } else {
+                "models/${params.model.modelId}:countTokens"
+            }
+        )
+        val response = platformHttpClient.execute(
+            PlatformHttpRequest(
+                method = "POST",
+                url = url,
+                headers = buildHeaders(
+                    providerSetting = providerSetting,
+                    customHeaders = params.customHeaders,
+                    includeJsonContentType = true,
+                ),
+                body = json.encodeToString(requestBody).encodeToByteArray(),
+                mediaType = "application/json",
+                proxy = providerSetting.proxy.toPlatformProxy(),
+            )
+        )
+        if (response.statusCode !in 200..299) return@withContext null
+        json.parseToJsonElement(response.body.decodeToString()).jsonObject["totalTokens"]
+            ?.jsonPrimitiveOrNull
+            ?.intOrNull
+            ?.takeIf { it > 0 }
     }
 
     override suspend fun streamText(
@@ -427,8 +472,17 @@ class GoogleProvider(
 
                     val isGeminiPro =
                         params.model.modelId.contains(Regex("2\\.5.*pro", RegexOption.IGNORE_CASE))
+                    val isGemini3 = ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)
 
-                    when (params.thinkingBudget) {
+                    if (isGemini3) {
+                        when (val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
+                            ReasoningLevel.AUTO -> {}
+                            ReasoningLevel.OFF -> put("thinkingLevel", "minimal")
+                            ReasoningLevel.LOW -> put("thinkingLevel", "low")
+                            ReasoningLevel.MEDIUM -> put("thinkingLevel", "medium")
+                            ReasoningLevel.HIGH, ReasoningLevel.MAX -> put("thinkingLevel", "high")
+                        }
+                    } else when (params.thinkingBudget) {
                         null, -1 -> {} // 如果是自动，不设置thinkingBudget参数
 
                         0 -> {
@@ -439,18 +493,7 @@ class GoogleProvider(
                             }
                         }
 
-                        else -> {
-                            if(ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
-                                when(val level = ReasoningLevel.fromBudgetTokens(params.thinkingBudget)) {
-                                    ReasoningLevel.HIGH -> put("thinkingLevel", "high")
-                                    ReasoningLevel.MEDIUM -> put("thinkingLevel", "high")
-                                    ReasoningLevel.LOW -> put("thinkingLevel", "low")
-                                    else -> error("Unknown reasoning level: $level")
-                                }
-                            } else {
-                                put("thinkingBudget", params.thinkingBudget)
-                            }
-                        }
+                        else -> put("thinkingBudget", params.thinkingBudget)
                     }
                 })
             }
@@ -692,7 +735,7 @@ class GoogleProvider(
     override suspend fun generateImage(
         providerSetting: ProviderSetting,
         params: ImageGenerationParams
-    ): ImageGenerationResult = withContext(Dispatchers.IO) {
+    ): ImageGenerationResult = withContext(me.rerere.ai.util.providerIoDispatcher) {
         require(providerSetting is ProviderSetting.Google) {
             "Expected Google provider setting"
         }
@@ -766,7 +809,7 @@ class GoogleProvider(
         providerSetting: ProviderSetting.Google,
         input: List<String>,
         model: Model
-    ): List<List<Float>> = withContext(Dispatchers.IO) {
+    ): List<List<Float>> = withContext(me.rerere.ai.util.providerIoDispatcher) {
         if (input.isEmpty()) {
             return@withContext emptyList()
         }
@@ -896,6 +939,36 @@ class GoogleProvider(
     }
 }
 
+internal data class GoogleProviderContextLimits(
+    val contextWindowTokens: Int? = null,
+    val maxInputTokens: Int? = null,
+    val maxOutputTokens: Int? = null,
+    val source: ContextLimitSource? = null,
+)
+
+internal fun parseGoogleProviderContextLimits(model: JsonObject): GoogleProviderContextLimits {
+    fun positiveInt(vararg keys: String): Int? = keys.firstNotNullOfOrNull { key ->
+        model[key]?.jsonPrimitiveOrNull?.contentOrNull
+            ?.toLongOrNull()
+            ?.takeIf { it in 1..Int.MAX_VALUE.toLong() }
+            ?.toInt()
+    }
+
+    val input = positiveInt("inputTokenLimit", "input_token_limit", "maxInputTokens")
+    val output = positiveInt("outputTokenLimit", "output_token_limit", "maxOutputTokens")
+    val combined = if (input != null && output != null) {
+        (input.toLong() + output.toLong()).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+    } else {
+        null
+    }
+    return GoogleProviderContextLimits(
+        contextWindowTokens = combined,
+        maxInputTokens = input,
+        maxOutputTokens = output,
+        source = ContextLimitSource.PROVIDER.takeIf { input != null || output != null },
+    )
+}
+
 private fun String.appendQueryParameter(name: String, value: String): String {
     val separator = if (contains("?")) "&" else "?"
     val encodedName = name.urlEncode(spaceAsPlus = true)
@@ -907,8 +980,12 @@ private fun List<CustomHeader>.toHeaderMap(): Map<String, String> {
     return filter { it.name.isNotBlank() }.associate { it.name to it.value }
 }
 
-private fun Map<String, String>.withReferHeaders(baseUrl: String): Map<String, String> {
-    return when (baseUrl.urlHostOrNull()) {
+private fun Map<String, String>.withReferHeaders(
+    baseUrl: String,
+    sessionId: String? = null,
+): Map<String, String> {
+    val host = baseUrl.urlHostOrNull()?.lowercase()
+    var headers = when (host) {
         "aihubmix.com" -> this + ("APP-Code" to "DKHA9468")
         "openrouter.ai" -> this + mapOf(
             "X-Title" to "LastChat",
@@ -916,6 +993,13 @@ private fun Map<String, String>.withReferHeaders(baseUrl: String): Map<String, S
         )
         else -> this
     }
+    if (host == "opencode.ai" || host?.endsWith(".opencode.ai") == true) {
+        if (headers.keys.none { it.equals("x-opencode-session", ignoreCase = true) }) {
+            val session = sessionId?.trim()?.takeIf { it.isNotEmpty() } ?: Uuid.random().toString()
+            headers = headers + ("x-opencode-session" to session)
+        }
+    }
+    return headers
 }
 
 private fun ProviderProxy.toPlatformProxy(): PlatformHttpProxy? {

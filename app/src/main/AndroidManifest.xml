@@ -16,7 +16,6 @@
   <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-  <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
   <uses-permission android:name="android.permission.VIBRATE" />
   <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
   <uses-permission android:name="android.permission.READ_CALENDAR" />
@@ -33,6 +32,7 @@
         android:name=".LastChatApp"
     android:allowBackup="true"
     android:appCategory="productivity"
+    android:largeHeap="true"
     android:dataExtractionRules="@xml/data_extraction_rules"
     android:enableOnBackInvokedCallback="true"
     android:fullBackupContent="@xml/backup_rules"
@@ -111,6 +111,29 @@
         </intent-filter>
     </activity>
 
+    <activity
+        android:name=".ui.activity.McpOAuthRedirectActivity"
+        android:exported="true"
+        android:theme="@android:style/Theme.Translucent.NoTitleBar">
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data
+                android:host="mcp"
+                android:pathPrefix="/oauth/"
+                android:scheme="lastchat" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data
+                android:host="mcp-oauth-callback"
+                android:scheme="lastchat" />
+        </intent-filter>
+    </activity>
+
     <!-- Text Selection Integration - "Ask LastChat" in system text selection menu -->
     <activity
         android:name=".ui.activity.TextSelectionActivity"
@@ -147,6 +170,48 @@
             <action android:name="android.service.notification.NotificationListenerService" />
         </intent-filter>
     </service>
+
+    <!-- Digital Assistant: makes LastChat selectable as the default assistant app -->
+    <service
+        android:name=".service.assist.LastChatVoiceInteractionService"
+        android:label="@string/assistant_overlay_service_label"
+        android:permission="android.permission.BIND_VOICE_INTERACTION"
+        android:exported="true">
+        <meta-data
+            android:name="android.voice_interaction"
+            android:resource="@xml/lastchat_voice_interaction_service" />
+        <intent-filter>
+            <action android:name="android.service.voice.VoiceInteractionService" />
+        </intent-filter>
+    </service>
+
+    <service
+        android:name=".service.assist.LastChatVoiceInteractionSessionService"
+        android:permission="android.permission.BIND_VOICE_INTERACTION"
+        android:exported="true" />
+
+    <service
+        android:name=".service.assist.LastChatRecognitionService"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.speech.RecognitionService" />
+        </intent-filter>
+        <meta-data
+            android:name="android.speech"
+            android:resource="@xml/lastchat_recognition_service" />
+    </service>
+
+    <!-- Floating assistant overlay launched by the assist gesture -->
+    <activity
+        android:name=".ui.activity.AssistantOverlayActivity"
+        android:exported="false"
+        android:theme="@style/Theme.Rikkahub.Translucent"
+        android:excludeFromRecents="true"
+        android:launchMode="singleTask"
+        android:taskAffinity="lastchat.rikkafork.cocolal.assistant"
+        android:configChanges="keyboardHidden|orientation|screenSize"
+        android:windowSoftInputMode="adjustResize"
+        tools:ignore="Instantiatable" />
 
     <provider
       android:name="androidx.core.content.FileProvider"

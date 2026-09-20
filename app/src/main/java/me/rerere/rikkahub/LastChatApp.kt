@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.di.appModule
 import me.rerere.rikkahub.di.dataSourceModule
@@ -24,6 +25,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.syncInstalledLocalModelsToSettings
+import me.rerere.rikkahub.data.datastore.withRecoveredAssistantsFromConversations
 import me.rerere.rikkahub.data.ai.models.ModelMetadataResolver
 import me.rerere.rikkahub.data.ai.models.ModelCatalogService
 import me.rerere.rikkahub.data.ai.models.mergeCatalogIntoSettings
@@ -45,21 +48,32 @@ import java.util.concurrent.TimeUnit
 import org.koin.androidx.workmanager.koin.workManagerFactory
 import org.koin.core.context.startKoin
 import me.rerere.common.platform.PlatformHttpClient
+import me.rerere.common.inference.LocalInferenceManager
 import me.rerere.rikkahub.di.SEARCH_PLATFORM_HTTP_CLIENT
 import me.rerere.rikkahub.utils.acceptLanguageHeader
 import me.rerere.search.SearchService
 import org.koin.core.qualifier.named
 
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import me.rerere.rikkahub.ui.image.AppImageLoaderFactory
+
 private const val TAG = "LastChatApp"
+private const val MEMORY_MAINTENANCE_WORK_NAME = "memory_consolidation_automatic"
 
 const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
 const val LOCAL_MODEL_DOWNLOAD_NOTIFICATION_CHANNEL_ID = "local_model_download"
 
-class LastChatApp : Application() {
+class LastChatApp : Application(), SingletonImageLoader.Factory {
     companion object {
         lateinit var instance: LastChatApp
             private set
+    }
+
+    override fun newImageLoader(context: PlatformContext): ImageLoader {
+        return get<AppImageLoaderFactory>().create(context)
     }
 
     override fun onCreate() {
@@ -71,14 +85,15 @@ class LastChatApp : Application() {
             workManagerFactory()
             modules(appModule, viewModelModule, dataSourceModule, repositoryModule)
         }
+        SingletonImageLoader.setSafe(this)
         val searchHttpClient = get<PlatformHttpClient>(named(SEARCH_PLATFORM_HTTP_CLIENT))
         SearchService.installPlatformHttpClient(searchHttpClient)
         SearchService.installBingSearchClient(AndroidBingSearchClient(searchHttpClient))
         SearchService.installAcceptLanguageProvider { acceptLanguageHeader() }
         this.createNotificationChannel()
 
-        // set cursor window size
-        DatabaseUtil.setCursorWindowSize(16 * 1024 * 1024)
+        // set cursor window size (4MB avoids native virtual memory exhaustion)
+        DatabaseUtil.setCursorWindowSize(4 * 1024 * 1024)
 
         // delete temp files
         deleteTempFiles()
@@ -113,29 +128,16 @@ class LastChatApp : Application() {
                 .build()
         )
 
-        // Schedule Memory Consolidation Worker dynamically
-        get<AppScope>().launch {
-            get<SettingsStore>().settingsFlow
-                .map { it.consolidationWorkerIntervalMinutes to it.consolidationRequiresDeviceIdle }
-                .distinctUntilChanged()
-                .collect { (interval, idle) ->
-                    val constraints = Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .apply {
-                            if (idle) setRequiresDeviceIdle(true)
-                        }
-                        .build()
-
-                    WorkManager.getInstance(this@LastChatApp).enqueueUniquePeriodicWork(
-                        "memory_consolidation",
-                        ExistingPeriodicWorkPolicy.UPDATE,
-                        PeriodicWorkRequestBuilder<MemoryConsolidationWorker>(
-                            interval.toLong().coerceAtLeast(15), TimeUnit.MINUTES
-                        )
-                            .setConstraints(constraints)
-                            .build()
-                    )
-                }
+        // Post-reply jobs do the normal Core + Episodic consolidation. This periodic scan is the
+        // durable safety net for process death, provider failures, and restored data.
+        WorkManager.getInstance(this).apply {
+            cancelUniqueWork("memory_consolidation")
+            cancelUniqueWork("memory_maintenance_v3")
+            enqueueUniquePeriodicWork(
+                MEMORY_MAINTENANCE_WORK_NAME,
+                ExistingPeriodicWorkPolicy.UPDATE,
+                PeriodicWorkRequestBuilder<MemoryConsolidationWorker>(6, TimeUnit.HOURS).build(),
+            )
         }
 
         // Update app shortcuts when recently used assistants change
@@ -146,7 +148,9 @@ class LastChatApp : Application() {
                 .distinctUntilChanged()
                 .collect { (recentlyUsed, assistants, isInit) ->
                     if (!isInit) {
-                        appShortcutManager.updateAssistantShortcuts(recentlyUsed, assistants)
+                        withContext(Dispatchers.IO) {
+                            appShortcutManager.updateAssistantShortcuts(recentlyUsed, assistants)
+                        }
                     }
                 }
         }
@@ -160,20 +164,45 @@ class LastChatApp : Application() {
 
         get<AppScope>().launch(Dispatchers.IO) {
             runCatching {
+                val settingsStore = get<SettingsStore>()
+                val conversationRepo = get<me.rerere.rikkahub.data.repository.ConversationRepository>()
+                val settings = settingsStore.settingsFlow.first { !it.init }
+                val recovered = settings.withRecoveredAssistantsFromConversations(
+                    conversationRepo.getDistinctAssistantIds(),
+                )
+                if (recovered != settings) {
+                    Log.i(TAG, "Restored ${recovered.assistants.size - settings.assistants.size} assistants from existing chats")
+                    settingsStore.update(recovered)
+                }
+            }.onFailure {
+                Log.w(TAG, "Conversation assistant recovery failed", it)
+            }
+            runCatching {
                 val catalogService = get<ModelCatalogService>()
                 catalogService.warmUp()
                 val snapshot = catalogService.snapshotOrNull() ?: return@runCatching
                 val settingsStore = get<SettingsStore>()
                 val settings = settingsStore.settingsFlow.first { !it.init }
-                settingsStore.update(
-                    mergeCatalogIntoSettings(
-                        settings = settings,
-                        snapshot = snapshot,
-                        resolver = get<ModelMetadataResolver>(),
-                    )
+                val merged = mergeCatalogIntoSettings(
+                    settings = settings,
+                    snapshot = snapshot,
+                    resolver = get<ModelMetadataResolver>(),
                 )
+                if (merged != settings) {
+                    settingsStore.update(merged)
+                }
             }.onFailure {
                 Log.w(TAG, "Model catalog warm-up failed", it)
+            }
+            runCatching {
+                syncInstalledLocalModelsToSettings(
+                    installed = get<me.rerere.locallm.LocalModelStore>().current(),
+                    totalRamGb = me.rerere.locallm.MemoryGuard.deviceTotalRamGb(this@LastChatApp),
+                    settingsStore = get<SettingsStore>(),
+                    catalogSnapshot = get<ModelCatalogService>().snapshotFlow.value,
+                )
+            }.onFailure {
+                Log.w(TAG, "Local model metadata sync failed", it)
             }
         }
     }
@@ -230,6 +259,32 @@ class LastChatApp : Application() {
     override fun onTerminate() {
         super.onTerminate()
         get<AppScope>().cancel()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
+            level == android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+        ) {
+            runCatching { get<LocalInferenceManager>().requestEviction() }
+            runCatching { coil3.SingletonImageLoader.get(this).memoryCache?.clear() }
+            runCatching { get<me.rerere.rikkahub.service.ChatService>().checkAllConversationsReferences() }
+            runCatching { me.rerere.rikkahub.data.model.clearCompiledRegexCache() }
+            runCatching { me.rerere.rikkahub.service.assist.AssistScreenHolder.clear() }
+        }
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+            runCatching { get<me.rerere.rikkahub.data.ai.AILoggingManager>().clearLogs() }
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        runCatching { get<LocalInferenceManager>().requestEviction() }
+        runCatching { coil3.SingletonImageLoader.get(this).memoryCache?.clear() }
+        runCatching { get<me.rerere.rikkahub.service.ChatService>().checkAllConversationsReferences() }
+        runCatching { me.rerere.rikkahub.data.model.clearCompiledRegexCache() }
+        runCatching { get<me.rerere.rikkahub.data.ai.AILoggingManager>().clearLogs() }
+        runCatching { me.rerere.rikkahub.service.assist.AssistScreenHolder.clear() }
     }
 }
 

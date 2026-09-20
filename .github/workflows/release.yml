@@ -12,7 +12,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,6 +23,17 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web-ui/package-lock.json
+
+      - name: Install web UI dependencies
+        working-directory: web-ui
+        run: npm ci
 
       - name: Gradle cache
         uses: actions/cache@v4
@@ -36,10 +47,10 @@ jobs:
         run: |
           # 解码base64编码的keystore文件
           echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
-          
+
           # 写入签名配置到local.properties
           echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
-          
+
           # 写入Google Services配置
           echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
 
@@ -53,7 +64,7 @@ jobs:
         if: success()
         with:
           name: artifacts
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/dev/debug/*.apk
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -61,6 +72,6 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: Release for ${{ github.ref_name }}
-          files: app/build/outputs/apk/debug/*.apk
+          files: app/build/outputs/apk/dev/debug/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
