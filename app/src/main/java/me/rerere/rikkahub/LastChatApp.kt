@@ -4,9 +4,6 @@ import android.app.Application
 import android.util.Log
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
-import com.google.firebase.crashlytics.FirebaseCrashlytics
-import com.google.firebase.remoteconfig.FirebaseRemoteConfig
-import com.google.firebase.remoteconfig.remoteConfigSettings
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -105,17 +102,7 @@ class LastChatApp : Application(), SingletonImageLoader.Factory {
         // delete temp files
         deleteTempFiles()
 
-        // Init remote config
-        get<FirebaseRemoteConfig>().apply {
-            setConfigSettingsAsync(remoteConfigSettings {
-                minimumFetchIntervalInSeconds = 1800
-            })
-            setDefaultsAsync(R.xml.remote_config_defaults)
-            fetchAndActivate()
-        }
-
-        val workManager = initializeLastChatWorkManager()
-        workManager?.enqueueUniquePeriodicWork(
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             SPONTANEOUS_WORK_NAME,
             ExistingPeriodicWorkPolicy.UPDATE,
             PeriodicWorkRequestBuilder<SpontaneousWorker>(
@@ -156,7 +143,7 @@ class LastChatApp : Application(), SingletonImageLoader.Factory {
                 PeriodicWorkRequestBuilder<MemoryConsolidationWorker>(6, TimeUnit.HOURS).build(),
             )
         }
-        
+
         // Update app shortcuts when recently used assistants change
         val appShortcutManager = me.rerere.rikkahub.utils.AppShortcutManager(this)
         get<AppScope>().launch {
@@ -183,8 +170,8 @@ class LastChatApp : Application(), SingletonImageLoader.Factory {
                     }
                 }
             }
-        })
-        
+        }
+
         get<AppScope>().launch(Dispatchers.IO) {
             runCatching {
                 val settingsStore = get<SettingsStore>()
