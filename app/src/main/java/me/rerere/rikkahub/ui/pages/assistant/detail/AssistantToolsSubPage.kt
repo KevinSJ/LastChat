@@ -322,6 +322,42 @@ fun AssistantToolsSubPage(
                     )
                 }
             )
+
+            SettingGroupItem(
+                title = stringResource(R.string.assistant_page_local_tools_intent_access_title),
+                subtitle = stringResource(R.string.assistant_page_local_tools_intent_access_desc),
+                trailing = {
+                    HapticSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.IntentAccess),
+                        onCheckedChange = { enabled ->
+                            val newLocalTools = if (enabled) {
+                                assistant.localTools + LocalToolOption.IntentAccess
+                            } else {
+                                assistant.localTools - LocalToolOption.IntentAccess
+                            }
+                            onUpdate(assistant.copy(localTools = newLocalTools))
+                        }
+                    )
+                }
+            )
+
+            SettingGroupItem(
+                title = stringResource(R.string.assistant_page_local_tools_calendar_access_title),
+                subtitle = stringResource(R.string.assistant_page_local_tools_calendar_access_desc),
+                trailing = {
+                    HapticSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.CalendarAccess),
+                        onCheckedChange = { enabled ->
+                            val newLocalTools = if (enabled) {
+                                assistant.localTools + LocalToolOption.CalendarAccess
+                            } else {
+                                assistant.localTools - LocalToolOption.CalendarAccess
+                            }
+                            onUpdate(assistant.copy(localTools = newLocalTools))
+                        }
+                    )
+                }
+            )
         }
 
         // MCP GROUP (only show if servers configured)

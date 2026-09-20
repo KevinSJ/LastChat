@@ -1,0 +1,35 @@
+name: PR Verification
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+
+      - name: Compile Kotlin & Verify Build
+        run: |
+          chmod +x gradlew
+          ./gradlew compileDebugKotlin
+
+      - name: Run Unit Tests
+        run: |
+          ./gradlew :app:testDebugUnitTest --tests "me.rerere.rikkahub.data.model.AssistantSerializationTest"
