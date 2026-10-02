@@ -1,3 +1,5 @@
+org.eclipse.*
+.classpath
 *.iml
 .gradle/
 .gradle-local/

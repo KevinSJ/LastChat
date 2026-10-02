@@ -102,7 +102,8 @@ class LastChatApp : Application(), SingletonImageLoader.Factory {
         // delete temp files
         deleteTempFiles()
 
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+        val workManager = initializeLastChatWorkManager()
+        workManager?.enqueueUniquePeriodicWork(
             SPONTANEOUS_WORK_NAME,
             ExistingPeriodicWorkPolicy.UPDATE,
             PeriodicWorkRequestBuilder<SpontaneousWorker>(
@@ -170,7 +171,7 @@ class LastChatApp : Application(), SingletonImageLoader.Factory {
                     }
                 }
             }
-        }
+        })
 
         get<AppScope>().launch(Dispatchers.IO) {
             runCatching {
@@ -222,7 +223,6 @@ class LastChatApp : Application(), SingletonImageLoader.Factory {
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             if (isHazeDetachedCoordinateCrash(throwable)) {
                 Log.w(TAG, "Suppressed Haze LayoutCoordinate crash after detach", throwable)
-                runCatching { get<FirebaseCrashlytics>().recordException(throwable) }
                 return@setDefaultUncaughtExceptionHandler
             }
             previous?.uncaughtException(thread, throwable)
