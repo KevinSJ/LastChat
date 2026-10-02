@@ -1,6 +1,10 @@
 name: Release Build
 
 on:
+  push:
+    branches: [LastChat]
+  pull_request:
+    branches: [LastChat]
   workflow_dispatch:
 
 permissions:
